@@ -80,6 +80,33 @@ th.gpte-sorted-desc::after {
   opacity: 1;
 }
 
+@media (prefers-color-scheme: dark) {
+  table.gpte-enhanced {
+    border-color: #555 !important;
+  }
+
+  table.gpte-enhanced th,
+  table.gpte-enhanced td {
+    border-color: #555 !important;
+  }
+
+  table.gpte-enhanced tbody tr:nth-child(odd) td {
+    background-color: #1e1e1e;
+  }
+
+  table.gpte-enhanced tbody tr:nth-child(even) td {
+    background-color: color-mix(in srgb, var(--bs-primary, #6a727a) 15%, #1e1e1e);
+  }
+
+  table.gpte-enhanced tbody tr:hover td {
+    background-color: color-mix(in srgb, var(--bs-primary, #6a727a) 28%, #1e1e1e);
+  }
+
+  th.gpte-sortable:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+}
+
 @media print {
   th.gpte-sortable::after {
     display: none;
