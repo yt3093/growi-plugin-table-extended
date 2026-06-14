@@ -56,8 +56,6 @@ table.gpte-enhanced tbody tr:hover td {
 th.gpte-sortable {
   cursor: pointer;
   user-select: none;
-  position: relative;
-  white-space: nowrap;
 }
 
 th.gpte-sortable:hover {
