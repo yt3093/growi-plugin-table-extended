@@ -64,20 +64,26 @@ th.gpte-sortable:hover {
   background-color: color-mix(in srgb, var(--bs-primary, #6a727a) 65%, #ffffff);
 }
 
-.gpte-arrow {
+th.gpte-sortable::after {
+  content: "⇅";
   margin-left: 0.3em;
   opacity: 0.35;
   font-size: 0.8em;
   display: inline-block;
 }
 
-th.gpte-sorted-asc .gpte-arrow,
-th.gpte-sorted-desc .gpte-arrow {
+th.gpte-sorted-asc::after {
+  content: "▲";
+  opacity: 1;
+}
+
+th.gpte-sorted-desc::after {
+  content: "▼";
   opacity: 1;
 }
 
 @media print {
-  .gpte-arrow {
+  th.gpte-sortable::after {
     display: none;
   }
 

@@ -3,7 +3,6 @@ import './styles/tableExtended.css';
 const ENHANCED_ATTR = 'data-gpte-enhanced';
 const ORIG_INDEX_ATTR = 'data-gpte-original-index';
 const COL_ATTR = 'data-gpte-col';
-const ARROW_CLASS = 'gpte-arrow';
 const SORTABLE_CLASS = 'gpte-sortable';
 const SORTED_ASC_CLASS = 'gpte-sorted-asc';
 const SORTED_DESC_CLASS = 'gpte-sorted-desc';
@@ -78,18 +77,14 @@ function sortRows(table: HTMLTableElement, colIdx: number, dir: SortDir): void {
 
 function updateHeaderState(th: HTMLTableCellElement, dir: SortDir): void {
   th.classList.remove(SORTED_ASC_CLASS, SORTED_DESC_CLASS);
-  const arrow = th.querySelector<HTMLSpanElement>(`.${ARROW_CLASS}`);
   if (dir === 'asc') {
     th.classList.add(SORTED_ASC_CLASS);
     th.setAttribute('aria-sort', 'ascending');
-    if (arrow) arrow.textContent = '▲';
   } else if (dir === 'desc') {
     th.classList.add(SORTED_DESC_CLASS);
     th.setAttribute('aria-sort', 'descending');
-    if (arrow) arrow.textContent = '▼';
   } else {
     th.setAttribute('aria-sort', 'none');
-    if (arrow) arrow.textContent = '⇅';
   }
 }
 
@@ -138,12 +133,6 @@ function enhanceTable(table: HTMLTableElement): void {
     th.setAttribute(COL_ATTR, String(colIdx));
     th.setAttribute('aria-sort', 'none');
     th.classList.add(SORTABLE_CLASS);
-
-    const arrow = document.createElement('span');
-    arrow.className = ARROW_CLASS;
-    arrow.textContent = '⇅';
-    arrow.setAttribute('aria-hidden', 'true');
-    th.appendChild(arrow);
   });
 
   const handler = (e: MouseEvent) => {
@@ -184,8 +173,6 @@ function cleanupTable(table: HTMLTableElement): void {
       th.classList.remove(SORTABLE_CLASS, SORTED_ASC_CLASS, SORTED_DESC_CLASS);
       th.removeAttribute('aria-sort');
       th.removeAttribute(COL_ATTR);
-      const arrow = th.querySelector(`.${ARROW_CLASS}`);
-      if (arrow) arrow.remove();
     });
   }
 
