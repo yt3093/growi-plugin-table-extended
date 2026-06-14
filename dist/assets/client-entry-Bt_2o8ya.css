@@ -1,1 +1,0 @@
-th.gpte-sortable{cursor:pointer;-webkit-user-select:none;user-select:none;white-space:nowrap;position:relative}th.gpte-sortable:hover{background-color:#0000000a}.gpte-arrow{opacity:.35;margin-left:.3em;font-size:.8em;display:inline-block}th.gpte-sorted-asc .gpte-arrow,th.gpte-sorted-desc .gpte-arrow{opacity:1}@media print{.gpte-arrow{display:none}th.gpte-sortable{cursor:default}}

@@ -154,6 +154,7 @@ function enhanceTable(table: HTMLTableElement): void {
   tableListeners.set(table, handler);
 
   table.setAttribute(ENHANCED_ATTR, '1');
+  table.classList.add('gpte-enhanced');
 }
 
 function cleanupTable(table: HTMLTableElement): void {
@@ -189,6 +190,7 @@ function cleanupTable(table: HTMLTableElement): void {
   }
 
   table.removeAttribute(ENHANCED_ATTR);
+  table.classList.remove('gpte-enhanced');
 }
 
 function scanAndEnhance(): void {
