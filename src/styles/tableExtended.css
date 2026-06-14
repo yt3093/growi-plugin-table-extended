@@ -19,7 +19,7 @@ table.gpte-enhanced td {
 
 table.gpte-enhanced thead th {
   color: #ffffff;
-  background-color: #6a727a;
+  background-color: var(--bs-primary, #6a727a);
   text-align: center;
 }
 
@@ -44,11 +44,11 @@ table.gpte-enhanced tbody tr:nth-child(odd) td {
 }
 
 table.gpte-enhanced tbody tr:nth-child(even) td {
-  background-color: #f5f5f5;
+  background-color: color-mix(in srgb, var(--bs-primary, #6a727a) 8%, #ffffff);
 }
 
 table.gpte-enhanced tbody tr:hover td {
-  background-color: #e5e5e5;
+  background-color: color-mix(in srgb, var(--bs-primary, #6a727a) 18%, #ffffff);
   cursor: default;
 }
 
