@@ -1,0 +1,32 @@
+th.gpte-sortable {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  white-space: nowrap;
+}
+
+th.gpte-sortable:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+.gpte-arrow {
+  margin-left: 0.3em;
+  opacity: 0.35;
+  font-size: 0.8em;
+  display: inline-block;
+}
+
+th.gpte-sorted-asc .gpte-arrow,
+th.gpte-sorted-desc .gpte-arrow {
+  opacity: 1;
+}
+
+@media print {
+  .gpte-arrow {
+    display: none;
+  }
+
+  th.gpte-sortable {
+    cursor: default;
+  }
+}
