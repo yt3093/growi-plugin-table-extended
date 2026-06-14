@@ -61,7 +61,7 @@ th.gpte-sortable {
 }
 
 th.gpte-sortable:hover {
-  background-color: rgba(255, 255, 255, 0.15);
+  background-color: color-mix(in srgb, var(--bs-primary, #6a727a) 65%, #ffffff);
 }
 
 .gpte-arrow {
