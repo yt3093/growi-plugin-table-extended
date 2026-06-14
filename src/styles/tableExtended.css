@@ -1,6 +1,38 @@
+/* Default (light mode) variables */
+:root {
+  --gpte-border-color: #c0c0c0;
+  --gpte-row-odd-bg: #ffffff;
+  --gpte-mix-base: #ffffff;
+  --gpte-row-even-mix: 8%;
+  --gpte-row-hover-mix: 18%;
+  --gpte-sortable-hover-bg: color-mix(in srgb, var(--bs-primary, #6a727a) 65%, #ffffff);
+}
+
+/* Dark mode variables: OS setting */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --gpte-border-color: #555;
+    --gpte-row-odd-bg: #1e1e1e;
+    --gpte-mix-base: #1e1e1e;
+    --gpte-row-even-mix: 15%;
+    --gpte-row-hover-mix: 28%;
+    --gpte-sortable-hover-bg: rgba(255, 255, 255, 0.2);
+  }
+}
+
+/* Dark mode variables: GROWI UI toggle (Bootstrap 5.3) */
+html[data-bs-theme="dark"] {
+  --gpte-border-color: #555;
+  --gpte-row-odd-bg: #1e1e1e;
+  --gpte-mix-base: #1e1e1e;
+  --gpte-row-even-mix: 15%;
+  --gpte-row-hover-mix: 28%;
+  --gpte-sortable-hover-bg: rgba(255, 255, 255, 0.2);
+}
+
 /* Table visual styles */
 table.gpte-enhanced {
-  border: 1px #c0c0c0 solid !important;
+  border: 1px var(--gpte-border-color) solid !important;
   border-radius: 7px;
   border-spacing: 0;
   border-collapse: separate;
@@ -10,7 +42,7 @@ table.gpte-enhanced {
 
 table.gpte-enhanced th,
 table.gpte-enhanced td {
-  border: 1px #c0c0c0 solid !important;
+  border: 1px var(--gpte-border-color) solid !important;
   padding-top: 6px;
   padding-left: 8px;
   padding-bottom: 6px;
@@ -40,15 +72,15 @@ table.gpte-enhanced tbody tr:last-child td:last-child {
 }
 
 table.gpte-enhanced tbody tr:nth-child(odd) td {
-  background-color: #ffffff;
+  background-color: var(--gpte-row-odd-bg);
 }
 
 table.gpte-enhanced tbody tr:nth-child(even) td {
-  background-color: color-mix(in srgb, var(--bs-primary, #6a727a) 8%, #ffffff);
+  background-color: color-mix(in srgb, var(--bs-primary, #6a727a) var(--gpte-row-even-mix), var(--gpte-mix-base));
 }
 
 table.gpte-enhanced tbody tr:hover td {
-  background-color: color-mix(in srgb, var(--bs-primary, #6a727a) 18%, #ffffff);
+  background-color: color-mix(in srgb, var(--bs-primary, #6a727a) var(--gpte-row-hover-mix), var(--gpte-mix-base));
   cursor: default;
 }
 
@@ -59,7 +91,7 @@ th.gpte-sortable {
 }
 
 th.gpte-sortable:hover {
-  background-color: color-mix(in srgb, var(--bs-primary, #6a727a) 65%, #ffffff);
+  background-color: var(--gpte-sortable-hover-bg);
 }
 
 th.gpte-sortable::after {
@@ -78,33 +110,6 @@ th.gpte-sorted-asc::after {
 th.gpte-sorted-desc::after {
   content: "▼";
   opacity: 1;
-}
-
-@media (prefers-color-scheme: dark) {
-  table.gpte-enhanced {
-    border-color: #555 !important;
-  }
-
-  table.gpte-enhanced th,
-  table.gpte-enhanced td {
-    border-color: #555 !important;
-  }
-
-  table.gpte-enhanced tbody tr:nth-child(odd) td {
-    background-color: #1e1e1e;
-  }
-
-  table.gpte-enhanced tbody tr:nth-child(even) td {
-    background-color: color-mix(in srgb, var(--bs-primary, #6a727a) 15%, #1e1e1e);
-  }
-
-  table.gpte-enhanced tbody tr:hover td {
-    background-color: color-mix(in srgb, var(--bs-primary, #6a727a) 28%, #1e1e1e);
-  }
-
-  th.gpte-sortable:hover {
-    background-color: rgba(255, 255, 255, 0.2);
-  }
 }
 
 @media print {
