@@ -19,7 +19,8 @@ function isHiddenContext(): boolean {
     location.hash === '#edit' ||
     path.endsWith('/edit') ||
     document.body.classList.contains('editing') ||
-    document.body.classList.contains('grw-editor-mode')
+    document.body.classList.contains('grw-editor-mode') ||
+    document.body.classList.contains('modal-open')
   ) return true;
   return false;
 }
