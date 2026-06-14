@@ -237,7 +237,11 @@ export function createTableExtended(): { mount(): void; unmount(): void } {
             }
           }
         } else if (m.type === 'attributes') {
-          shouldScan = true;
+          if (isHiddenContext()) {
+            document.querySelectorAll<HTMLTableElement>(`table[${ENHANCED_ATTR}]`).forEach(cleanupTable);
+          } else {
+            shouldScan = true;
+          }
         }
         if (shouldScan) break;
       }
