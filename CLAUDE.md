@@ -14,13 +14,15 @@
 | 操作 | 各 `th` クリックで該当列を asc → desc → 元の順 にトグル |
 | データ型推定 | 数値（カンマ区切り対応）→ ISO 日付 → 文字列の順で判定し列単位で固定 |
 | 同時ソート | 1 テーブル内で 1 列のみ（他列クリックで切替） |
-| 視覚表現 | sortable な `th` に矢印（⇅ → ▲ → ▼）、`aria-sort` 属性、`cursor:pointer`、ホバー背景 |
+| 視覚表現 | sortable な `th` の矢印は CSS `::after` 疑似要素（⇅ → ▲ → ▼）、`aria-sort` 属性、`cursor:pointer`、`color-mix` 由来のホバー背景 |
+| 視覚スタイル | `table.gpte-enhanced` に対し角丸ボーダー・ヘッダー背景（`--bs-primary`）・偶数行ストライプ・行ホバーを `color-mix(--bs-primary, base)` で付与。CSS 変数で light/dark を切替 |
+| ダークモード | `@media (prefers-color-scheme: dark)` と `html[data-bs-theme="dark"]`（Bootstrap 5.3 GROWI UI トグル）の双方で CSS 変数を上書き |
 | 元順保持 | 初期化時に各 `<tr>` へ `data-gpte-original-index` を付与し、3 回目クリックで復元 |
 | 適用除外 | `thead` なし / `th` 0 個 / `data-no-sort` 属性付きテーブル / 既に `data-gpte-enhanced` 付き |
-| 非表示条件 | 編集モード（`/edit`, `#edit`, `body.editing`）・管理画面（`/admin`）・印刷時は矢印非表示かつソート無効 |
+| 非表示条件 | 編集モード（`/edit`, `#edit`, `body.editing`, `body.modal-open`）・管理画面（`/admin`）・印刷時は矢印非表示かつソート無効 |
 | SPA 遷移 | `pushState` / `replaceState` モンキーパッチ + `popstate` + `hashchange` で再スキャン |
 | 新規テーブル追加 | `MutationObserver`（`childList: true, subtree: true`）で `<table>` 追加を検知して自動初期化 |
-| deactivate | 全 listener 解除・MutationObserver.disconnect・モンキーパッチ復元・付与した class / 属性 / 矢印 span を全削除・行順を復元 |
+| deactivate | 全 listener 解除・MutationObserver.disconnect・モンキーパッチ復元・付与した `gpte-enhanced` / `gpte-sortable` / `gpte-sorted-*` クラスと `aria-sort` / `data-gpte-*` 属性を全削除・行順を復元 |
 
 ## アーキテクチャ
 
@@ -34,7 +36,7 @@ growi-plugin-table-extended/
 ├── src/
 │   ├── tableExtended.ts               # コア実装（スキャン・ソート・SPA 遷移・クリーンアップ）
 │   ├── types.ts                        # Window 型の最小宣言
-│   └── styles/tableExtended.css       # sortable th スタイル・矢印・@media print
+│   └── styles/tableExtended.css       # sortable th スタイル・矢印 (::after)・テーブル視覚スタイル・ダークモード・@media print
 ├── package.json
 ├── tsconfig.json
 ├── tsconfig.node.json
@@ -52,12 +54,12 @@ growi-plugin-table-extended/
 **`createTableExtended()`** が公開 API で `{ mount, unmount }` を返す。
 
 - **`scanAndEnhance()`**: `document.querySelectorAll('table')` でページ上の全テーブルをスキャンし、対象判定をパスしたものに `enhanceTable()` を呼ぶ。`isHiddenContext()` が true の場合は何もしない。
-- **`enhanceTable(table)`**: 各 `th` に `data-gpte-col` / `aria-sort` / `.gpte-sortable` を付与し、矢印 `<span>` を挿入。`tbody > tr` 全件に `data-gpte-original-index` を付与。イベントはクリック委譲で `thead` に 1 つだけ登録し、`WeakMap` に参照を保持。テーブルに `data-gpte-enhanced="1"` を付けて二重初期化を防ぐ。
+- **`enhanceTable(table)`**: 各 `th` に `data-gpte-col` / `aria-sort` / `.gpte-sortable` を付与（矢印は CSS `::after` で描画するため span 挿入は行わない）。`tbody > tr` 全件に `data-gpte-original-index` を付与。イベントはクリック委譲で `thead` に 1 つだけ登録し、`WeakMap` に参照を保持。テーブルに `data-gpte-enhanced="1"` と `.gpte-enhanced` クラスを付与して二重初期化を防ぎ、視覚スタイル（CSS `table.gpte-enhanced` セレクタ）を適用する。
 - **`sortRows(table, colIdx, dir)`**: `tbody > tr` を配列化し、列値から `detectColumnType()` で数値 / 日付 / 文字列を判定。比較関数でソートして DocumentFragment で再 append。`dir === 'none'` は `data-gpte-original-index` 昇順で復元。
-- **`cleanupTable(table)`**: `data-gpte-original-index` 昇順で行を復元し、付与した属性・クラス・矢印 span を全 `th` から削除。`thead` のクリックハンドラを `WeakMap` から取り出して `removeEventListener`。
+- **`cleanupTable(table)`**: `data-gpte-original-index` 昇順で行を復元し、付与した属性・クラス（`gpte-sortable` / `gpte-sorted-*`）を全 `th` から削除。`thead` のクリックハンドラを `WeakMap` から取り出して `removeEventListener`。テーブルから `data-gpte-enhanced` 属性と `.gpte-enhanced` クラスを削除して視覚スタイルを解除する。
 - **SPA 遷移検知**: `pushState` / `replaceState` にカスタムイベント `'growi-pte-navigate'` をモンキーパッチ。`popstate` / `hashchange` も購読し、いずれも 2 段 `requestAnimationFrame` で DOM が安定してから `scanAndEnhance()` を実行。
-- **MutationObserver**: `document.body` を `childList: true, subtree: true, attributes: true, attributeFilter: ['class']` で監視。新しい `<table>` 追加時または `body.class` 変化時（編集モード終了）に `scheduleScan()` を呼ぶ。
-- **編集モード判定**: `location.hash === '#edit'` / `pathname.endsWith('/edit')` / `body.classList.contains('editing')` / `body.classList.contains('grw-editor-mode')` のいずれかで判定。
+- **MutationObserver**: `document.body` を `childList: true, subtree: true, attributes: true, attributeFilter: ['class']` で監視。新しい `<table>` 追加時は `scheduleScan()` を呼ぶ。`body.class` 変化時（編集モード遷移）は `isHiddenContext()` を判定し、true（編集モードへ移行）なら enhance 済みテーブルを即 `cleanupTable` し、false（閲覧モードへ復帰）なら `scheduleScan()` を呼ぶ。
+- **編集モード判定**: `location.hash === '#edit'` / `pathname.endsWith('/edit')` / `body.classList.contains('editing')` / `body.classList.contains('grw-editor-mode')` / `body.classList.contains('modal-open')`（GROWI テーブル編集モーダル）のいずれかで判定。
 - **データ型推定**: `detectColumnType(values)` で列全セルを見て all-numeric（カンマ除去後）→ all-date（`YYYY-MM-DD` or `YYYY/MM/DD` パターン）→ 文字列の優先順で判定。
 
 ## ハマりどころ (必読)
@@ -117,6 +119,12 @@ export default defineConfig({
 
 また Edit → View 遷移で `location.hash` のみが変わる場合、`pushState` のモンキーパッチは発火しない。`hashchange` イベントの購読が必須。
 
+### 6. `th` 内の矢印は CSS `::after` で描画する（`<span>` 禁止）
+
+GROWI 標準のテーブルは `th` 上に編集ボタン（鉛筆アイコン）を絶対配置で重ねている。`th` に `position: relative` + 子 `<span>`（矢印）を入れるとスタッキングコンテキストが変わり、そのレイヤが編集ボタンを覆って押せなくなる（コミット `80ed36e` / `aa66aa5` で対処した既知の不具合）。
+
+解決策：`<span>` は一切挿入せず、`th.gpte-sortable::after { content: '⇅' }` で矢印を描画する。`th` の `position` も明示しない。`gpte-sortable` / `gpte-sorted-asc` / `gpte-sorted-desc` クラスのトグルだけでソート状態を表示する。
+
 ## デプロイ手順
 
 ```bash
@@ -142,6 +150,9 @@ GROWI 管理画面 `/admin/plugins` で **削除 → 再インストール**。
 10. 管理画面（`/admin`）ではソートが無効化される
 11. 印刷プレビューで矢印が非表示になる
 12. プラグイン無効化で全テーブルが元の状態（矢印・class・行順）に完全復元される
+13. ダークモード切替（OS 設定 / GROWI UI トグル）でテーブルの配色が追従する
+14. テーブル編集モーダルを開いている間は矢印・スタイルが消え、編集ボタンが正常に押せる
+15. テーブル編集モーダルを閉じた後、自動でソート可能・スタイル付き状態に戻る
 
 ## 会話ガイドライン
 
