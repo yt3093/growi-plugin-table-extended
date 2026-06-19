@@ -11,6 +11,8 @@
   --gpte-input-border: #ced4da;
   --gpte-input-placeholder: #6c757d;
   --gpte-footer-color: #6c757d;
+  --gpte-mark-bg: color-mix(in srgb, var(--bs-warning, #ffc107) 75%, transparent);
+  --gpte-mark-color: inherit;
 }
 
 /* Dark mode variables: OS setting */
@@ -27,6 +29,8 @@
     --gpte-input-border: #555;
     --gpte-input-placeholder: #adb5bd;
     --gpte-footer-color: #adb5bd;
+    --gpte-mark-bg: color-mix(in srgb, var(--bs-warning, #ffc107) 55%, transparent);
+    --gpte-mark-color: #ffffff;
   }
 }
 
@@ -43,6 +47,8 @@ html[data-bs-theme="dark"] {
   --gpte-input-border: #555;
   --gpte-input-placeholder: #adb5bd;
   --gpte-footer-color: #adb5bd;
+  --gpte-mark-bg: color-mix(in srgb, var(--bs-warning, #ffc107) 55%, transparent);
+  --gpte-mark-color: #ffffff;
 }
 
 /* Table visual styles */
@@ -161,6 +167,16 @@ th.gpte-sorted-desc::after {
   text-align: right;
 }
 
+/* Match highlight */
+table.gpte-enhanced tbody mark.gpte-mark {
+  background-color: var(--gpte-mark-bg);
+  color: var(--gpte-mark-color);
+  padding: 0 1px;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
 /* Sticky header */
 table.gpte-enhanced.gpte-sticky-head thead th {
   position: sticky;
@@ -186,5 +202,11 @@ table.gpte-enhanced.gpte-sticky-head thead th {
   table.gpte-enhanced.gpte-sticky-head thead th {
     position: static;
     box-shadow: none;
+  }
+
+  table.gpte-enhanced tbody mark.gpte-mark {
+    background-color: transparent;
+    color: inherit;
+    padding: 0;
   }
 }

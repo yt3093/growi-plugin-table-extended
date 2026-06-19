@@ -19,6 +19,7 @@
 | ダークモード | `@media (prefers-color-scheme: dark)` と `html[data-bs-theme="dark"]`（Bootstrap 5.3 GROWI UI トグル）の双方で CSS 変数を上書き |
 | 元順保持 | 初期化時に各 `<tr>` へ `data-gpte-original-index` を付与し、3 回目クリックで復元 |
 | フィルタ | テーブル上部に検索ボックス 1 つ。全列対象・大小文字無視の部分一致。スペース区切りで AND 絞り込み |
+| マッチハイライト | フィルタ一致テキストを `<mark class="gpte-mark">` で wrap し背景色強調。クエリ空で全解除。textNode 単位のため `<strong>` 等のインライン要素を跨ぐマッチは描画されない（行表示判定は従来通り `textContent` 全体で機能）。印刷時は背景を透明化 |
 | 行数カウント | フィルタ入力中のみテーブル下部に「M / N 件」を表示（空クリアで非表示） |
 | 適用除外 | `thead` なし / `th` 0 個 / `data-no-sort` 属性付きテーブル / 既に `data-gpte-enhanced` 付き |
 | フィルタ除外 | `data-no-filter` 属性付きテーブルではフィルタ UI のみ非表示（ソートは有効） |
@@ -27,7 +28,7 @@
 | 非表示条件 | 編集モード（`/edit`, `#edit`, `body.editing`, `body.modal-open`）・管理画面（`/admin`）・印刷時は矢印・フィルタ UI 非表示かつソート無効。印刷時はスティッキーも解除 |
 | SPA 遷移 | `pushState` / `replaceState` モンキーパッチ + `popstate` + `hashchange` で再スキャン |
 | 新規テーブル追加 | `MutationObserver`（`childList: true, subtree: true`）で `<table>` 追加を検知して自動初期化 |
-| deactivate | 全 listener 解除・MutationObserver.disconnect・ResizeObserver.disconnect・モンキーパッチ復元・付与した `gpte-enhanced` / `gpte-sortable` / `gpte-sorted-*` / `gpte-row-odd` / `gpte-row-even` クラスと `aria-sort` / `data-gpte-*` 属性を全削除・フィルタ UI 削除・行の `display` / 行順を復元 |
+| deactivate | 全 listener 解除・MutationObserver.disconnect・ResizeObserver.disconnect・モンキーパッチ復元・付与した `gpte-enhanced` / `gpte-sortable` / `gpte-sorted-*` / `gpte-row-odd` / `gpte-row-even` クラスと `aria-sort` / `data-gpte-*` 属性を全削除・`mark.gpte-mark` を全 unwrap・フィルタ UI 削除・行の `display` / 行順を復元 |
 
 ## アーキテクチャ
 
@@ -61,9 +62,11 @@ growi-plugin-table-extended/
 - **`scanAndEnhance()`**: `document.querySelectorAll('table')` でページ上の全テーブルをスキャンし、対象判定をパスしたものに `enhanceTable()` を呼ぶ。`isHiddenContext()` が true の場合は何もしない。
 - **`enhanceTable(table)`**: 各 `th` に `data-gpte-col` / `aria-sort` / `.gpte-sortable` を付与（矢印は CSS `::after` で描画するため span 挿入は行わない）。`tbody > tr` 全件に `data-gpte-original-index` を付与。イベントはクリック委譲で `thead` に 1 つだけ登録し、`WeakMap` に参照を保持。テーブルに `data-gpte-enhanced="1"` と `.gpte-enhanced` クラスを付与して二重初期化を防ぎ、視覚スタイル（CSS `table.gpte-enhanced` セレクタ）を適用する。`data-no-sticky` がなければ `.gpte-sticky-head` クラスを追加してスティッキーヘッダーを有効化する（CSS `table.gpte-enhanced.gpte-sticky-head thead th` セレクタで `position: sticky` 適用）。`data-no-filter` がなければフィルタバー（`[data-gpte-filter-bar]`）を table の直前の sibling として、カウントフッター（`[data-gpte-filter-footer]`）を直後の sibling として挿入し、`FilterRefs` を `WeakMap` で table に紐付ける。最後に `restripeRows()` を呼んで全行に `gpte-row-odd` / `gpte-row-even` クラスを付与する。
 - **`sortRows(table, colIdx, dir)`**: `tbody > tr` を配列化し、列値から `detectColumnType()` で数値 / 日付 / 文字列を判定。比較関数でソートして DocumentFragment で再 append。`dir === 'none'` は `data-gpte-original-index` 昇順で復元。各行の `style.display`（フィルタによる非表示状態）は inline style として保持されるため、ソート後も非表示が維持される。再 append 後に `restripeRows()` を呼んで、新しい DOM 順に基づいて表示中の行へ `gpte-row-odd` / `gpte-row-even` を振り直す。
-- **`applyFilter(table, query)`**: クエリを空白で分割してトークン化し、`tbody > tr` 全行の `textContent` に対して全トークンが含まれる行のみ `display: ''`、それ以外を `display: 'none'` にする。空クエリ時は全行を復元。処理後に `restripeRows()` で表示中の行に `gpte-row-odd` / `gpte-row-even` を振り直し（CSS `:nth-child` は非表示行も数えるため、この再計算でフィルタ後のストライプ崩れを防ぐ）、`updateFilterFooter()` を呼んでカウントを更新。
+- **`applyFilter(table, query)`**: クエリを空白で分割してトークン化する。まず `unwrapHighlights()` で前回のハイライトをクリア。続いて `tbody > tr` 全行の `textContent` に対して全トークンが含まれる行のみ `display: ''`、それ以外を `display: 'none'` にする（空クエリ時は全行を復元）。`restripeRows()` で表示中の行に `gpte-row-odd` / `gpte-row-even` を振り直した後、トークンが 1 個以上ある場合は `highlightMatches()` でマッチ箇所を `<mark>` wrap する。最後に `updateFilterFooter()` を呼んでカウントを更新。
+- **`unwrapHighlights(table)`**: `tbody mark.gpte-mark` を全件取得し、`mark.replaceWith(...childNodes)` で unwrap。unwrap した親要素に `normalize()` を呼んで隣接 textNode を統合する（次回の `indexOf` 位置がズレるのを防ぐ）。
+- **`highlightMatches(table, tokens)`**: 表示中の `tr` のみを対象に `TreeWalker(SHOW_TEXT)` で textNode を走査。各トークンを `indexOf` ループで走査してマッチ範囲を収集し、重なりをマージ。末尾から先頭の順で `splitText` → `createElement('mark')` → `insertBefore` で wrap する（末尾から処理することで前方インデックスが安定する）。`<thead>` 配下・既存 `mark.gpte-mark` 内・`<script>` / `<style>` 配下の textNode は REJECT する。`innerHTML` は一切使わない。
 - **`updateFilterFooter(footer, query, visible, total)`**: クエリが空なら `footer.hidden = true`。非空なら `footer.hidden = false` にして `textContent` を「M / N 件」形式で書き込む（`innerHTML` は使わない）。
-- **`cleanupTable(table)`**: `filterRefs` WeakMap からフィルタ UI の参照を取り出し、input の `'input'` イベントを解除してバー・フッターを `.remove()`。`tbody > tr` の `style.display` を全て `''` に戻し、`gpte-row-odd` / `gpte-row-even` クラスを除去してから `data-gpte-original-index` 昇順で行を復元。付与した属性・クラス（`gpte-sortable` / `gpte-sorted-*`）を全 `th` から削除。`thead` のクリックハンドラを `WeakMap` から取り出して `removeEventListener`。テーブルから `data-gpte-enhanced` 属性・`.gpte-enhanced` クラス・`.gpte-sticky-head` クラスをまとめて削除して視覚スタイルとスティッキーを解除する。
+- **`cleanupTable(table)`**: まず `unwrapHighlights()` で `<mark>` を全除去する。続いて `filterRefs` WeakMap からフィルタ UI の参照を取り出し、input の `'input'` イベントを解除してバー・フッターを `.remove()`。`tbody > tr` の `style.display` を全て `''` に戻し、`gpte-row-odd` / `gpte-row-even` クラスを除去してから `data-gpte-original-index` 昇順で行を復元。付与した属性・クラス（`gpte-sortable` / `gpte-sorted-*`）を全 `th` から削除。`thead` のクリックハンドラを `WeakMap` から取り出して `removeEventListener`。テーブルから `data-gpte-enhanced` 属性・`.gpte-enhanced` クラス・`.gpte-sticky-head` クラスをまとめて削除して視覚スタイルとスティッキーを解除する。
 - **`findNavbarEl()`**: `NAVBAR_SELECTORS` を上から順に試し、`offsetHeight > 0` の要素を返す。見つからなければ `null`。`getNavbarHeight()` はこれを内部で呼んで高さのみを返すラッパー。
 - **ResizeObserver（`navbarObserver`）**: `mount()` 時に `findNavbarEl()` でナビバー要素を取得し、見つかった場合は `ResizeObserver` をアタッチ。ナビバーのサイズ変化のたびに `table[data-gpte-enhanced].gpte-sticky-head` 全件の `--gpte-sticky-top` を `style.setProperty` で更新する。`unmount()` で `navbarObserver.disconnect()` してクリーンアップ。
 - **SPA 遷移検知**: `pushState` / `replaceState` にカスタムイベント `'growi-pte-navigate'` をモンキーパッチ。`popstate` / `hashchange` も購読し、いずれも 2 段 `requestAnimationFrame` で DOM が安定してから `scanAndEnhance()` を実行。
@@ -148,6 +151,14 @@ CSS の `tr:nth-child(odd/even)` は `display: none` の行も子要素として
 
 解決策：`table.insertAdjacentElement('beforebegin', bar)` と `table.insertAdjacentElement('afterend', footer)` で sibling として挿入する。filter 用 div は `<table>` を含まないため MutationObserver の再スキャン判定をすり抜ける。cleanup は `.remove()` 一発で完了。
 
+### 9. ハイライトは textNode 単位で行う（HTML 全体に対する正規表現 replace を使わない）
+
+セル内 HTML を `innerHTML` で書き換える方式は XSS リスクと既存リンクのイベント破壊が起きる。`TreeWalker(SHOW_TEXT)` で textNode を 1 つずつ走査し、`splitText` で範囲を切り出して `createElement('mark')` で wrap する。
+
+再フィルタ時は `mark.gpte-mark` を `replaceWith(...childNodes)` で外し、親要素に `normalize()` を呼んで隣接 textNode を統合する（これがないと次回の `indexOf` 位置がズレる）。
+
+textNode の境界を跨ぐマッチ（例: `<strong>東京</strong>都` で「東京都」を検索）はハイライトが付かない制約がある。行の表示判定は `row.textContent` 全体を見るため、マッチした行は正しく表示される。
+
 ## デプロイ手順
 
 ```bash
@@ -194,6 +205,18 @@ GROWI 管理画面 `/admin/plugins` で **削除 → 再インストール**。
 31. 編集モード移行時は sticky も解除され、閲覧モード復帰で再度固定される
 32. 印刷プレビューでスティッキーが解除され（`position: static`）、影も消える
 33. プラグイン無効化で `gpte-sticky-head` クラスが全テーブルから削除される
+34. フィルタ入力でマッチした `td` 内テキストが黄色（warning 系）背景でハイライトされる
+35. 複数トークン（「東京 2025」）入力で、各トークンの該当箇所がすべてハイライトされる
+36. 大文字小文字混在クエリで同じ箇所がハイライトされる（「Tokyo」「TOKYO」「tokyo」）
+37. クエリをクリアすると `<mark>` が消えセルが元の DOM 状態に戻る
+38. クエリを連続変更しても前回のハイライトが残らず、`<mark>` がネストしない
+39. `<th>` 内のヘッダーテキストはハイライトされない（編集ボタンが従来通り押せる）
+40. `<a>` 内テキストがマッチしてもリンクは有効なまま（クリック可）
+41. ハイライト中にソートしても `<mark>` は維持され、ソート結果が正しい
+42. ダークモード（OS / GROWI UI トグル両方）でハイライトのコントラストが保たれる
+43. 印刷プレビューでハイライト背景が消え、テキストのみ印字される
+44. プラグイン無効化で全テーブルから `<mark class="gpte-mark">` が消え、textContent が完全に元通り
+45. 編集モード遷移でハイライトが消え、復帰後の新規フィルタで再付与される
 
 ## 会話ガイドライン
 
