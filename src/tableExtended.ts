@@ -13,6 +13,12 @@ const NO_STICKY_ATTR = 'data-no-sticky';
 const ROW_ODD_CLASS = 'gpte-row-odd';
 const ROW_EVEN_CLASS = 'gpte-row-even';
 const MARK_CLASS = 'gpte-mark';
+const COPY_BTN_ATTR = 'data-gpte-copy-btn';
+const COPY_LABEL_DEFAULT = 'コピー';
+const COPY_LABEL_CSV_OK = '✓ CSVコピー済み';
+const COPY_LABEL_MD_OK = '✓ MDコピー済み';
+const COPY_LABEL_FAIL = 'コピー失敗';
+const COPY_FEEDBACK_MS = 2000;
 
 // GROWI のナビバー要素を検索するセレクタ候補（上から順に試す）
 const NAVBAR_SELECTORS = [
@@ -31,6 +37,9 @@ interface FilterRefs {
   bar: HTMLDivElement;
   footer: HTMLDivElement;
   handler: () => void;
+  copyBtn?: HTMLButtonElement;
+  copyHandler?: (e: MouseEvent) => void;
+  copyTimerId?: number;
 }
 
 const tableListeners = new WeakMap<HTMLTableElement, (e: MouseEvent) => void>();
@@ -165,6 +174,82 @@ function highlightMatches(table: HTMLTableElement, tokens: string[]): void {
       }
     }
   }
+}
+
+function getCopyCellText(cell: Element): string {
+  return (cell.textContent ?? '')
+    .replace(/\s*\r?\n\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractRows(table: HTMLTableElement): { header: string[]; rows: string[][] } {
+  const thead = table.querySelector('thead');
+  const header = thead
+    ? Array.from(thead.querySelectorAll<HTMLTableCellElement>('tr > th')).map(getCopyCellText)
+    : [];
+  const tbody = table.querySelector('tbody');
+  const bodyRows: string[][] = [];
+  if (tbody) {
+    for (const row of Array.from(tbody.querySelectorAll<HTMLTableRowElement>(':scope > tr'))) {
+      if (row.style.display === 'none') continue;
+      bodyRows.push(
+        Array.from(row.querySelectorAll<HTMLTableCellElement>(':scope > td')).map(getCopyCellText)
+      );
+    }
+  }
+  return { header, rows: bodyRows };
+}
+
+function csvEscape(v: string): string {
+  return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+}
+
+function toCsv({ header, rows }: { header: string[]; rows: string[][] }): string {
+  const lines: string[] = [];
+  if (header.length) lines.push(header.map(csvEscape).join(','));
+  for (const r of rows) lines.push(r.map(csvEscape).join(','));
+  return lines.join('\r\n');
+}
+
+function mdEscape(v: string): string {
+  return v.replace(/\|/g, '\\|');
+}
+
+function toMarkdown({ header, rows }: { header: string[]; rows: string[][] }): string {
+  if (header.length === 0) return '';
+  const lines: string[] = [];
+  lines.push(`| ${header.map(mdEscape).join(' | ')} |`);
+  lines.push(`| ${header.map(() => '---').join(' | ')} |`);
+  for (const r of rows) {
+    const padded = header.map((_, i) => mdEscape(r[i] ?? ''));
+    lines.push(`| ${padded.join(' | ')} |`);
+  }
+  return lines.join('\n');
+}
+
+function flashCopyLabel(table: HTMLTableElement, btn: HTMLButtonElement, label: string): void {
+  const refs = filterRefs.get(table);
+  if (refs?.copyTimerId !== undefined) window.clearTimeout(refs.copyTimerId);
+  btn.textContent = label;
+  const id = window.setTimeout(() => {
+    btn.textContent = COPY_LABEL_DEFAULT;
+    if (refs) refs.copyTimerId = undefined;
+  }, COPY_FEEDBACK_MS);
+  if (refs) refs.copyTimerId = id;
+}
+
+function handleCopyClick(table: HTMLTableElement, btn: HTMLButtonElement, shift: boolean): void {
+  const data = extractRows(table);
+  const text = shift ? toMarkdown(data) : toCsv(data);
+  const okLabel = shift ? COPY_LABEL_MD_OK : COPY_LABEL_CSV_OK;
+  navigator.clipboard.writeText(text).then(
+    () => flashCopyLabel(table, btn, okLabel),
+    (err) => {
+      console.warn('[gpte] clipboard write failed:', err);
+      flashCopyLabel(table, btn, COPY_LABEL_FAIL);
+    },
+  );
 }
 
 function applyFilter(table: HTMLTableElement, query: string): void {
@@ -346,6 +431,22 @@ function enhanceTable(table: HTMLTableElement): void {
 
     filterRefs.set(table, { bar, footer, handler: filterHandler });
 
+    if (typeof navigator.clipboard?.writeText === 'function') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.setAttribute(COPY_BTN_ATTR, '1');
+      btn.textContent = COPY_LABEL_DEFAULT;
+      btn.title = 'クリック: CSV / Shift+クリック: Markdown';
+      const copyHandler = (e: MouseEvent) => handleCopyClick(table, btn, e.shiftKey);
+      btn.addEventListener('click', copyHandler);
+      bar.appendChild(btn);
+      const refs = filterRefs.get(table);
+      if (refs) {
+        refs.copyBtn = btn;
+        refs.copyHandler = copyHandler;
+      }
+    }
+
     table.insertAdjacentElement('beforebegin', bar);
     table.insertAdjacentElement('afterend', footer);
   }
@@ -360,6 +461,10 @@ function cleanupTable(table: HTMLTableElement): void {
   if (refs) {
     const input = refs.bar.querySelector<HTMLInputElement>('input');
     if (input) input.removeEventListener('input', refs.handler);
+    if (refs.copyTimerId !== undefined) window.clearTimeout(refs.copyTimerId);
+    if (refs.copyBtn && refs.copyHandler) {
+      refs.copyBtn.removeEventListener('click', refs.copyHandler);
+    }
     refs.bar.remove();
     refs.footer.remove();
     filterRefs.delete(table);

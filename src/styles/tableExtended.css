@@ -136,6 +136,9 @@ th.gpte-sorted-desc::after {
 /* Filter bar */
 [data-gpte-filter-bar] {
   margin: 8px 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 [data-gpte-filter-bar] input[type="search"] {
@@ -157,6 +160,29 @@ th.gpte-sorted-desc::after {
 
 [data-gpte-filter-bar] input[type="search"]::placeholder {
   color: var(--gpte-input-placeholder);
+}
+
+/* Copy button */
+[data-gpte-copy-btn] {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid var(--gpte-input-border);
+  border-radius: 4px;
+  background-color: var(--gpte-input-bg);
+  color: var(--gpte-input-color);
+  font-size: 0.85em;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+[data-gpte-copy-btn]:hover {
+  border-color: var(--bs-primary, #6a727a);
+}
+
+[data-gpte-copy-btn]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--bs-primary, #6a727a) 50%, transparent);
+  outline-offset: 1px;
 }
 
 /* Filter footer (row count) */
@@ -187,7 +213,8 @@ table.gpte-enhanced.gpte-sticky-head thead th {
 
 @media print {
   [data-gpte-filter-bar],
-  [data-gpte-filter-footer] {
+  [data-gpte-filter-footer],
+  [data-gpte-copy-btn] {
     display: none;
   }
 
