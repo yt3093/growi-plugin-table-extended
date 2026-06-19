@@ -6,6 +6,11 @@
   --gpte-row-even-mix: 8%;
   --gpte-row-hover-mix: 18%;
   --gpte-sortable-hover-bg: color-mix(in srgb, var(--bs-primary, #6a727a) 65%, #ffffff);
+  --gpte-input-bg: #ffffff;
+  --gpte-input-color: #212529;
+  --gpte-input-border: #ced4da;
+  --gpte-input-placeholder: #6c757d;
+  --gpte-footer-color: #6c757d;
 }
 
 /* Dark mode variables: OS setting */
@@ -17,6 +22,11 @@
     --gpte-row-even-mix: 15%;
     --gpte-row-hover-mix: 28%;
     --gpte-sortable-hover-bg: rgba(255, 255, 255, 0.2);
+    --gpte-input-bg: #2b2b2b;
+    --gpte-input-color: #dee2e6;
+    --gpte-input-border: #555;
+    --gpte-input-placeholder: #adb5bd;
+    --gpte-footer-color: #adb5bd;
   }
 }
 
@@ -28,6 +38,11 @@ html[data-bs-theme="dark"] {
   --gpte-row-even-mix: 15%;
   --gpte-row-hover-mix: 28%;
   --gpte-sortable-hover-bg: rgba(255, 255, 255, 0.2);
+  --gpte-input-bg: #2b2b2b;
+  --gpte-input-color: #dee2e6;
+  --gpte-input-border: #555;
+  --gpte-input-placeholder: #adb5bd;
+  --gpte-footer-color: #adb5bd;
 }
 
 /* Table visual styles */
@@ -112,7 +127,46 @@ th.gpte-sorted-desc::after {
   opacity: 1;
 }
 
+/* Filter bar */
+[data-gpte-filter-bar] {
+  margin: 8px 0 4px;
+}
+
+[data-gpte-filter-bar] input[type="search"] {
+  width: min(320px, 100%);
+  padding: 4px 8px;
+  border: 1px solid var(--gpte-input-border);
+  border-radius: 4px;
+  background-color: var(--gpte-input-bg);
+  color: var(--gpte-input-color);
+  font-size: 0.9em;
+  outline: none;
+  box-sizing: border-box;
+}
+
+[data-gpte-filter-bar] input[type="search"]:focus {
+  border-color: var(--bs-primary, #6a727a);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bs-primary, #6a727a) 25%, transparent);
+}
+
+[data-gpte-filter-bar] input[type="search"]::placeholder {
+  color: var(--gpte-input-placeholder);
+}
+
+/* Filter footer (row count) */
+[data-gpte-filter-footer] {
+  margin: 4px 0 8px;
+  font-size: 0.85em;
+  color: var(--gpte-footer-color);
+  text-align: right;
+}
+
 @media print {
+  [data-gpte-filter-bar],
+  [data-gpte-filter-footer] {
+    display: none;
+  }
+
   th.gpte-sortable::after {
     display: none;
   }

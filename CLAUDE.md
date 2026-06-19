@@ -4,7 +4,7 @@
 
 - **名前**: `growi-plugin-table-extended`
 - **種別**: GROWI Script プラグイン
-- **目的**: GROWI ページ本文中の Markdown テーブルのヘッダーをクリックして列ソートできるようにする
+- **目的**: GROWI ページ本文中の Markdown テーブルのヘッダーをクリックして列ソートでき、キーワードで行をフィルタできるようにする
 
 ### 確定仕様
 
@@ -18,11 +18,14 @@
 | 視覚スタイル | `table.gpte-enhanced` に対し角丸ボーダー・ヘッダー背景（`--bs-primary`）・偶数行ストライプ・行ホバーを `color-mix(--bs-primary, base)` で付与。CSS 変数で light/dark を切替 |
 | ダークモード | `@media (prefers-color-scheme: dark)` と `html[data-bs-theme="dark"]`（Bootstrap 5.3 GROWI UI トグル）の双方で CSS 変数を上書き |
 | 元順保持 | 初期化時に各 `<tr>` へ `data-gpte-original-index` を付与し、3 回目クリックで復元 |
+| フィルタ | テーブル上部に検索ボックス 1 つ。全列対象・大小文字無視の部分一致。スペース区切りで AND 絞り込み |
+| 行数カウント | フィルタ入力中のみテーブル下部に「M / N 件」を表示（空クリアで非表示） |
 | 適用除外 | `thead` なし / `th` 0 個 / `data-no-sort` 属性付きテーブル / 既に `data-gpte-enhanced` 付き |
-| 非表示条件 | 編集モード（`/edit`, `#edit`, `body.editing`, `body.modal-open`）・管理画面（`/admin`）・印刷時は矢印非表示かつソート無効 |
+| フィルタ除外 | `data-no-filter` 属性付きテーブルではフィルタ UI のみ非表示（ソートは有効） |
+| 非表示条件 | 編集モード（`/edit`, `#edit`, `body.editing`, `body.modal-open`）・管理画面（`/admin`）・印刷時は矢印・フィルタ UI 非表示かつソート無効 |
 | SPA 遷移 | `pushState` / `replaceState` モンキーパッチ + `popstate` + `hashchange` で再スキャン |
 | 新規テーブル追加 | `MutationObserver`（`childList: true, subtree: true`）で `<table>` 追加を検知して自動初期化 |
-| deactivate | 全 listener 解除・MutationObserver.disconnect・モンキーパッチ復元・付与した `gpte-enhanced` / `gpte-sortable` / `gpte-sorted-*` クラスと `aria-sort` / `data-gpte-*` 属性を全削除・行順を復元 |
+| deactivate | 全 listener 解除・MutationObserver.disconnect・モンキーパッチ復元・付与した `gpte-enhanced` / `gpte-sortable` / `gpte-sorted-*` クラスと `aria-sort` / `data-gpte-*` 属性を全削除・フィルタ UI 削除・行の `display` / 行順を復元 |
 
 ## アーキテクチャ
 
@@ -153,6 +156,15 @@ GROWI 管理画面 `/admin/plugins` で **削除 → 再インストール**。
 13. ダークモード切替（OS 設定 / GROWI UI トグル）でテーブルの配色が追従する
 14. テーブル編集モーダルを開いている間は矢印・スタイルが消え、編集ボタンが正常に押せる
 15. テーブル編集モーダルを閉じた後、自動でソート可能・スタイル付き状態に戻る
+16. テーブル上部の検索ボックスにキーワードを入力すると、含む行のみ表示される
+17. スペース区切りで複数キーワードを入力すると AND で絞り込まれる（「東京 2025」など）
+18. 大文字・小文字を無視してマッチする（「TOKYO」「tokyo」が同じ結果）
+19. フィルタ入力中はテーブル下に「M / N 件」が表示され、クリアすると非表示になる
+20. フィルタ後ソート → 非表示行は非表示のまま。ソート後フィルタ → 行の並び順は維持される
+21. `<table data-no-filter>` 属性付きテーブルではフィルタ UI が表示されない（ソートは有効）
+22. 編集モード移行時はフィルタ UI も消え、閲覧モード復帰で再表示される
+23. プラグイン無効化でフィルタ UI 削除・全行の `display` が復元される
+24. 印刷プレビューでフィルタ入力欄・行数カウントが非表示になる
 
 ## 会話ガイドライン
 
