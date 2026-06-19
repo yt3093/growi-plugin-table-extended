@@ -164,24 +164,39 @@ th.gpte-sorted-desc::after {
 
 /* Copy button */
 [data-gpte-copy-btn] {
-  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  min-width: 26px;
+  min-height: 26px;
   border: 1px solid var(--gpte-input-border);
   border-radius: 4px;
   background-color: var(--gpte-input-bg);
   color: var(--gpte-input-color);
-  font-size: 0.85em;
   cursor: pointer;
-  white-space: nowrap;
   flex-shrink: 0;
+  transition: color 0.15s, border-color 0.15s;
 }
 
 [data-gpte-copy-btn]:hover {
   border-color: var(--bs-primary, #6a727a);
+  color: var(--bs-primary, #6a727a);
 }
 
 [data-gpte-copy-btn]:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--bs-primary, #6a727a) 50%, transparent);
   outline-offset: 1px;
+}
+
+[data-gpte-copy-btn].gpte-copy-ok {
+  color: var(--bs-success, #198754);
+  border-color: var(--bs-success, #198754);
+}
+
+[data-gpte-copy-btn].gpte-copy-fail {
+  color: var(--bs-danger, #dc3545);
+  border-color: var(--bs-danger, #dc3545);
 }
 
 /* Filter footer (row count) */

@@ -14,11 +14,11 @@ const ROW_ODD_CLASS = 'gpte-row-odd';
 const ROW_EVEN_CLASS = 'gpte-row-even';
 const MARK_CLASS = 'gpte-mark';
 const COPY_BTN_ATTR = 'data-gpte-copy-btn';
-const COPY_LABEL_DEFAULT = 'コピー';
-const COPY_LABEL_CSV_OK = '✓ CSVコピー済み';
-const COPY_LABEL_MD_OK = '✓ MDコピー済み';
-const COPY_LABEL_FAIL = 'コピー失敗';
+const COPY_CLASS_OK = 'gpte-copy-ok';
+const COPY_CLASS_FAIL = 'gpte-copy-fail';
 const COPY_FEEDBACK_MS = 2000;
+const SVG_NS = 'http://www.w3.org/2000/svg';
+type CopyBtnState = 'copy' | 'ok-csv' | 'ok-md' | 'fail';
 
 // GROWI のナビバー要素を検索するセレクタ候補（上から順に試す）
 const NAVBAR_SELECTORS = [
@@ -232,12 +232,80 @@ function toMarkdown({ header, rows }: { header: string[]; rows: string[][] }): s
   return lines.join('\n');
 }
 
-function flashCopyLabel(table: HTMLTableElement, btn: HTMLButtonElement, label: string): void {
+function createSvgEl(tag: string, attrs: Record<string, string>): Element {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+function buildSvg(children: Array<{ tag: string; attrs: Record<string, string> }>): SVGSVGElement {
+  const svg = createSvgEl('svg', {
+    width: '15', height: '15', viewBox: '0 0 24 24',
+    fill: 'none', stroke: 'currentColor',
+    'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+    'aria-hidden': 'true',
+  }) as SVGSVGElement;
+  for (const { tag, attrs } of children) svg.appendChild(createSvgEl(tag, attrs));
+  return svg;
+}
+
+function makeCopyIcon(): SVGSVGElement {
+  return buildSvg([
+    { tag: 'rect', attrs: { width: '14', height: '14', x: '8', y: '8', rx: '2', ry: '2' } },
+    { tag: 'path', attrs: { d: 'M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2' } },
+  ]);
+}
+
+function makeCheckIcon(): SVGSVGElement {
+  return buildSvg([
+    { tag: 'path', attrs: { d: 'M20 6 9 17l-5-5' } },
+  ]);
+}
+
+function makeFailIcon(): SVGSVGElement {
+  return buildSvg([
+    { tag: 'path', attrs: { d: 'M18 6 6 18' } },
+    { tag: 'path', attrs: { d: 'm6 6 12 12' } },
+  ]);
+}
+
+function setCopyBtnState(btn: HTMLButtonElement, state: CopyBtnState): void {
+  while (btn.firstChild) btn.removeChild(btn.firstChild);
+  btn.classList.remove(COPY_CLASS_OK, COPY_CLASS_FAIL);
+
+  let icon: SVGSVGElement;
+  let label: string;
+  let titleText: string;
+
+  if (state === 'ok-csv') {
+    icon = makeCheckIcon();
+    label = titleText = 'CSVコピー済み';
+    btn.classList.add(COPY_CLASS_OK);
+  } else if (state === 'ok-md') {
+    icon = makeCheckIcon();
+    label = titleText = 'Markdownコピー済み';
+    btn.classList.add(COPY_CLASS_OK);
+  } else if (state === 'fail') {
+    icon = makeFailIcon();
+    label = titleText = 'コピー失敗';
+    btn.classList.add(COPY_CLASS_FAIL);
+  } else {
+    icon = makeCopyIcon();
+    label = 'コピー (クリック: CSV / Shift+クリック: Markdown)';
+    titleText = 'クリック: CSV / Shift+クリック: Markdown';
+  }
+
+  btn.setAttribute('aria-label', label);
+  btn.title = titleText;
+  btn.appendChild(icon);
+}
+
+function flashCopyState(table: HTMLTableElement, btn: HTMLButtonElement, state: 'ok-csv' | 'ok-md' | 'fail'): void {
   const refs = filterRefs.get(table);
   if (refs?.copyTimerId !== undefined) window.clearTimeout(refs.copyTimerId);
-  btn.textContent = label;
+  setCopyBtnState(btn, state);
   const id = window.setTimeout(() => {
-    btn.textContent = COPY_LABEL_DEFAULT;
+    setCopyBtnState(btn, 'copy');
     if (refs) refs.copyTimerId = undefined;
   }, COPY_FEEDBACK_MS);
   if (refs) refs.copyTimerId = id;
@@ -246,12 +314,11 @@ function flashCopyLabel(table: HTMLTableElement, btn: HTMLButtonElement, label: 
 function handleCopyClick(table: HTMLTableElement, btn: HTMLButtonElement, shift: boolean): void {
   const data = extractRows(table, shift ? '<br>' : ' ');
   const text = shift ? toMarkdown(data) : toCsv(data);
-  const okLabel = shift ? COPY_LABEL_MD_OK : COPY_LABEL_CSV_OK;
   navigator.clipboard.writeText(text).then(
-    () => flashCopyLabel(table, btn, okLabel),
+    () => flashCopyState(table, btn, shift ? 'ok-md' : 'ok-csv'),
     (err) => {
       console.warn('[gpte] clipboard write failed:', err);
-      flashCopyLabel(table, btn, COPY_LABEL_FAIL);
+      flashCopyState(table, btn, 'fail');
     },
   );
 }
@@ -439,8 +506,7 @@ function enhanceTable(table: HTMLTableElement): void {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.setAttribute(COPY_BTN_ATTR, '1');
-      btn.textContent = COPY_LABEL_DEFAULT;
-      btn.title = 'クリック: CSV / Shift+クリック: Markdown';
+      setCopyBtnState(btn, 'copy');
       const copyHandler = (e: MouseEvent) => handleCopyClick(table, btn, e.shiftKey);
       btn.addEventListener('click', copyHandler);
       bar.appendChild(btn);
