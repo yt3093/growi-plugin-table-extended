@@ -11,6 +11,17 @@ const FILTER_FOOTER_ATTR = 'data-gpte-filter-footer';
 const NO_FILTER_ATTR = 'data-no-filter';
 const NO_STICKY_ATTR = 'data-no-sticky';
 
+// GROWI のナビバー要素を検索するセレクタ候補（上から順に試す）
+// DevTools で実際のセレクタを確認したらここを修正する
+const NAVBAR_SELECTORS = [
+  '.grw-app-header',
+  '.grw-navigation-header',
+  'nav.navbar.fixed-top',
+  'nav.navbar.sticky-top',
+  '.navbar-fixed-top',
+  'header.fixed-top',
+];
+
 type SortDir = 'asc' | 'desc' | 'none';
 type ColType = 'number' | 'date' | 'string';
 
@@ -22,6 +33,14 @@ interface FilterRefs {
 
 const tableListeners = new WeakMap<HTMLTableElement, (e: MouseEvent) => void>();
 const filterRefs = new WeakMap<HTMLTableElement, FilterRefs>();
+
+function getNavbarHeight(): number {
+  for (const selector of NAVBAR_SELECTORS) {
+    const el = document.querySelector<HTMLElement>(selector);
+    if (el && el.offsetHeight > 0) return el.offsetHeight;
+  }
+  return 0;
+}
 
 function isHiddenContext(): boolean {
   const path = location.pathname;
@@ -192,6 +211,10 @@ function enhanceTable(table: HTMLTableElement): void {
   table.classList.add('gpte-enhanced');
   if (!table.hasAttribute(NO_STICKY_ATTR)) {
     table.classList.add('gpte-sticky-head');
+    const navbarHeight = getNavbarHeight();
+    if (navbarHeight > 0) {
+      table.style.setProperty('--gpte-sticky-top', `${navbarHeight}px`);
+    }
   }
 
   if (!table.hasAttribute(NO_FILTER_ATTR)) {
@@ -261,6 +284,7 @@ function cleanupTable(table: HTMLTableElement): void {
 
   table.removeAttribute(ENHANCED_ATTR);
   table.classList.remove('gpte-enhanced', 'gpte-sticky-head');
+  table.style.removeProperty('--gpte-sticky-top');
 }
 
 function scanAndEnhance(): void {
