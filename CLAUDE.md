@@ -23,7 +23,7 @@
 | 行数カウント | フィルタ入力中のみテーブル下部に「M / N 件」を表示（空クリアで非表示） |
 | 適用除外 | `thead` なし / `th` 0 個 / `data-no-sort` 属性付きテーブル / 既に `data-gpte-enhanced` 付き |
 | フィルタ除外 | `data-no-filter` 属性付きテーブルではフィルタ UI のみ非表示（ソートは有効）。コピーボタンもフィルタバーに同居するため、`data-no-filter` テーブルではコピー機能も無効 |
-| コピー | フィルタバー右端の「コピー」ボタン。クリックで表示行を CSV（RFC 4180 / `,` 区切り / `\r\n` 改行）、Shift+クリックで Markdown テーブル形式でクリップボードへ。ヘッダー行を常に含む。セル内改行は半角スペースに変換。`textContent` ベースのため `<mark>` / `::after` 矢印は除去済み。`navigator.clipboard` 非対応環境ではボタンを非表示。成功時はボタンテキストを 2 秒切替（`✓ CSVコピー済み` / `✓ MDコピー済み`）、失敗時は `コピー失敗` を表示 |
+| コピー | フィルタバー右端のアイコンボタン（二重矩形 SVG）。クリックで表示行を CSV（RFC 4180 / `,` 区切り / `\n` 改行）、Shift+クリックで Markdown テーブル形式でクリップボードへ。ヘッダー行を常に含む。セル内改行（`<br>`）は CSV では半角スペース・Markdown では `<br>` に変換。`textContent` ベースのため `<mark>` / `::after` 矢印は除去済み。`navigator.clipboard` 非対応環境ではボタンを非表示。成功時は 2 秒間フォーマット別 SVG アイコン（CSV: スプレッドシートグリッド＋✓バッジ / MD: Markdown ロゴ風＋✓バッジ）と背景フラッシュで視覚フィードバック。失敗時は × アイコン＋赤フラッシュ。`prefers-reduced-motion: reduce` 環境ではフラッシュなし |
 | スティッキーヘッダー | スクロール時に `thead` を画面上部に固定。GROWI ナビバー（`NAVBAR_SELECTORS` 優先順で検出）の高さを JS が自動取得し `--gpte-sticky-top` を inline style で設定。`ResizeObserver` でナビバー高さの変化に動的追従。手動上書きは CSS 変数 `--gpte-sticky-top` で可能（デフォルト `0px`）。固定時に薄い下方向 `box-shadow` を付与 |
 | スティッキー除外 | `data-no-sticky` 属性付きテーブルでは sticky を無効化（ソート/フィルタは有効） |
 | 非表示条件 | 編集モード（`/edit`, `#edit`, `body.editing`, `body.modal-open`）・管理画面（`/admin`）・印刷時は矢印・フィルタ UI 非表示かつソート無効。印刷時はスティッキーも解除 |
