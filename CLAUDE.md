@@ -37,7 +37,7 @@
 growi-plugin-table-extended/
 ├── client-entry.tsx                    # activate / deactivate + pluginActivators 登録
 ├── src/
-│   ├── tableExtended.ts               # コア実装（スキャン・ソート・SPA 遷移・クリーンアップ）
+│   ├── tableExtended.ts               # コア実装（スキャン・ソート・フィルタ・SPA 遷移・クリーンアップ）
 │   ├── types.ts                        # Window 型の最小宣言
 │   └── styles/tableExtended.css       # sortable th スタイル・矢印 (::after)・テーブル視覚スタイル・ダークモード・@media print
 ├── package.json
@@ -57,9 +57,11 @@ growi-plugin-table-extended/
 **`createTableExtended()`** が公開 API で `{ mount, unmount }` を返す。
 
 - **`scanAndEnhance()`**: `document.querySelectorAll('table')` でページ上の全テーブルをスキャンし、対象判定をパスしたものに `enhanceTable()` を呼ぶ。`isHiddenContext()` が true の場合は何もしない。
-- **`enhanceTable(table)`**: 各 `th` に `data-gpte-col` / `aria-sort` / `.gpte-sortable` を付与（矢印は CSS `::after` で描画するため span 挿入は行わない）。`tbody > tr` 全件に `data-gpte-original-index` を付与。イベントはクリック委譲で `thead` に 1 つだけ登録し、`WeakMap` に参照を保持。テーブルに `data-gpte-enhanced="1"` と `.gpte-enhanced` クラスを付与して二重初期化を防ぎ、視覚スタイル（CSS `table.gpte-enhanced` セレクタ）を適用する。
-- **`sortRows(table, colIdx, dir)`**: `tbody > tr` を配列化し、列値から `detectColumnType()` で数値 / 日付 / 文字列を判定。比較関数でソートして DocumentFragment で再 append。`dir === 'none'` は `data-gpte-original-index` 昇順で復元。
-- **`cleanupTable(table)`**: `data-gpte-original-index` 昇順で行を復元し、付与した属性・クラス（`gpte-sortable` / `gpte-sorted-*`）を全 `th` から削除。`thead` のクリックハンドラを `WeakMap` から取り出して `removeEventListener`。テーブルから `data-gpte-enhanced` 属性と `.gpte-enhanced` クラスを削除して視覚スタイルを解除する。
+- **`enhanceTable(table)`**: 各 `th` に `data-gpte-col` / `aria-sort` / `.gpte-sortable` を付与（矢印は CSS `::after` で描画するため span 挿入は行わない）。`tbody > tr` 全件に `data-gpte-original-index` を付与。イベントはクリック委譲で `thead` に 1 つだけ登録し、`WeakMap` に参照を保持。テーブルに `data-gpte-enhanced="1"` と `.gpte-enhanced` クラスを付与して二重初期化を防ぎ、視覚スタイル（CSS `table.gpte-enhanced` セレクタ）を適用する。`data-no-filter` がなければフィルタバー（`[data-gpte-filter-bar]`）を table の直前の sibling として、カウントフッター（`[data-gpte-filter-footer]`）を直後の sibling として挿入し、`FilterRefs` を `WeakMap` で table に紐付ける。
+- **`sortRows(table, colIdx, dir)`**: `tbody > tr` を配列化し、列値から `detectColumnType()` で数値 / 日付 / 文字列を判定。比較関数でソートして DocumentFragment で再 append。`dir === 'none'` は `data-gpte-original-index` 昇順で復元。各行の `style.display`（フィルタによる非表示状態）は inline style として保持されるため、ソート後も非表示が維持される。
+- **`applyFilter(table, query)`**: クエリを空白で分割してトークン化し、`tbody > tr` 全行の `textContent` に対して全トークンが含まれる行のみ `display: ''`、それ以外を `display: 'none'` にする。空クエリ時は全行を復元。処理後に `updateFilterFooter()` を呼んでカウントを更新。
+- **`updateFilterFooter(footer, query, visible, total)`**: クエリが空なら `footer.hidden = true`。非空なら `footer.hidden = false` にして `textContent` を「M / N 件」形式で書き込む（`innerHTML` は使わない）。
+- **`cleanupTable(table)`**: `filterRefs` WeakMap からフィルタ UI の参照を取り出し、input の `'input'` イベントを解除してバー・フッターを `.remove()`。`tbody > tr` の `style.display` を全て `''` に戻してから `data-gpte-original-index` 昇順で行を復元。付与した属性・クラス（`gpte-sortable` / `gpte-sorted-*`）を全 `th` から削除。`thead` のクリックハンドラを `WeakMap` から取り出して `removeEventListener`。テーブルから `data-gpte-enhanced` 属性と `.gpte-enhanced` クラスを削除して視覚スタイルを解除する。
 - **SPA 遷移検知**: `pushState` / `replaceState` にカスタムイベント `'growi-pte-navigate'` をモンキーパッチ。`popstate` / `hashchange` も購読し、いずれも 2 段 `requestAnimationFrame` で DOM が安定してから `scanAndEnhance()` を実行。
 - **MutationObserver**: `document.body` を `childList: true, subtree: true, attributes: true, attributeFilter: ['class']` で監視。新しい `<table>` 追加時は `scheduleScan()` を呼ぶ。`body.class` 変化時（編集モード遷移）は `isHiddenContext()` を判定し、true（編集モードへ移行）なら enhance 済みテーブルを即 `cleanupTable` し、false（閲覧モードへ復帰）なら `scheduleScan()` を呼ぶ。
 - **編集モード判定**: `location.hash === '#edit'` / `pathname.endsWith('/edit')` / `body.classList.contains('editing')` / `body.classList.contains('grw-editor-mode')` / `body.classList.contains('modal-open')`（GROWI テーブル編集モーダル）のいずれかで判定。
@@ -127,6 +129,14 @@ export default defineConfig({
 GROWI 標準のテーブルは `th` 上に編集ボタン（鉛筆アイコン）を絶対配置で重ねている。`th` に `position: relative` + 子 `<span>`（矢印）を入れるとスタッキングコンテキストが変わり、そのレイヤが編集ボタンを覆って押せなくなる（コミット `80ed36e` / `aa66aa5` で対処した既知の不具合）。
 
 解決策：`<span>` は一切挿入せず、`th.gpte-sortable::after { content: '⇅' }` で矢印を描画する。`th` の `position` も明示しない。`gpte-sortable` / `gpte-sorted-asc` / `gpte-sorted-desc` クラスのトグルだけでソート状態を表示する。
+
+### 7. フィルタ UI は `<table>` を wrapper で包まず sibling として挿入する
+
+フィルタバー・カウントフッターをテーブルと親子関係にしたい場合、`<table>` を `<div>` で包む（wrap）実装が思い浮かぶが、**GROWI のページレイアウトで table の親要素のスタイルに依存している箇所** を壊すリスクがある。
+
+また、MutationObserver の childList 監視で「追加ノードが `table` かその子孫に `table` を持つか」を判定しているため、filter 用 div を挿入する際に `el.querySelector('table')` がヒットしてしまい無限スキャンループが起きる恐れがある。
+
+解決策：`table.insertAdjacentElement('beforebegin', bar)` と `table.insertAdjacentElement('afterend', footer)` で sibling として挿入する。filter 用 div は `<table>` を含まないため MutationObserver の再スキャン判定をすり抜ける。cleanup は `.remove()` 一発で完了。
 
 ## デプロイ手順
 
