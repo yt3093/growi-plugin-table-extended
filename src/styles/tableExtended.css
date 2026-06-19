@@ -151,10 +151,10 @@ th.gpte-sorted-desc::after {
 
 [data-gpte-filter-bar] .gpte-filter-input-wrap .gpte-filter-icon {
   position: absolute;
-  left: 8px;
+  left: 7px;
   top: 50%;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   transform: translateY(-50%);
   color: var(--gpte-input-placeholder);
   pointer-events: none;
@@ -166,7 +166,7 @@ th.gpte-sorted-desc::after {
 
 [data-gpte-filter-bar] input[type="search"] {
   width: min(320px, 100%);
-  padding: 4px 8px 4px 28px;
+  padding: 4px 8px 4px 30px;
   border: 1px solid var(--gpte-input-border);
   border-radius: 4px;
   background-color: var(--gpte-input-bg);
