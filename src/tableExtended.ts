@@ -10,6 +10,8 @@ const FILTER_BAR_ATTR = 'data-gpte-filter-bar';
 const FILTER_FOOTER_ATTR = 'data-gpte-filter-footer';
 const NO_FILTER_ATTR = 'data-no-filter';
 const NO_STICKY_ATTR = 'data-no-sticky';
+const ROW_ODD_CLASS = 'gpte-row-odd';
+const ROW_EVEN_CLASS = 'gpte-row-even';
 
 // GROWI のナビバー要素を検索するセレクタ候補（上から順に試す）
 const NAVBAR_SELECTORS = [
@@ -67,6 +69,19 @@ function updateFilterFooter(footer: HTMLDivElement, query: string, visible: numb
   footer.textContent = `${visible} / ${total} 件`;
 }
 
+function restripeRows(table: HTMLTableElement): void {
+  const tbody = table.querySelector('tbody');
+  if (!tbody) return;
+  let visibleIdx = 0;
+  for (const row of Array.from(tbody.querySelectorAll<HTMLTableRowElement>(':scope > tr'))) {
+    if (row.style.display === 'none') continue;
+    const isOdd = visibleIdx % 2 === 0;
+    row.classList.toggle(ROW_ODD_CLASS, isOdd);
+    row.classList.toggle(ROW_EVEN_CLASS, !isOdd);
+    visibleIdx++;
+  }
+}
+
 function applyFilter(table: HTMLTableElement, query: string): void {
   const refs = filterRefs.get(table);
   const tbody = table.querySelector('tbody');
@@ -89,6 +104,7 @@ function applyFilter(table: HTMLTableElement, query: string): void {
     }
   }
 
+  restripeRows(table);
   updateFilterFooter(refs.footer, query, visible, total);
 }
 
@@ -141,6 +157,7 @@ function sortRows(table: HTMLTableElement, colIdx: number, dir: SortDir): void {
   const frag = document.createDocumentFragment();
   for (const row of rows) frag.appendChild(row);
   tbody.appendChild(frag);
+  restripeRows(table);
 }
 
 function updateHeaderState(th: HTMLTableCellElement, dir: SortDir): void {
@@ -243,6 +260,8 @@ function enhanceTable(table: HTMLTableElement): void {
     table.insertAdjacentElement('beforebegin', bar);
     table.insertAdjacentElement('afterend', footer);
   }
+
+  restripeRows(table);
 }
 
 function cleanupTable(table: HTMLTableElement): void {
@@ -265,6 +284,7 @@ function cleanupTable(table: HTMLTableElement): void {
     const frag = document.createDocumentFragment();
     for (const row of rows) {
       row.style.display = '';
+      row.classList.remove(ROW_ODD_CLASS, ROW_EVEN_CLASS);
       row.removeAttribute(ORIG_INDEX_ATTR);
       frag.appendChild(row);
     }

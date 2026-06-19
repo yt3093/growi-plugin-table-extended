@@ -86,11 +86,11 @@ table.gpte-enhanced tbody tr:last-child td:last-child {
   border-radius: 0 0 5px 0;
 }
 
-table.gpte-enhanced tbody tr:nth-child(odd) td {
+table.gpte-enhanced tbody tr.gpte-row-odd td {
   background-color: var(--gpte-row-odd-bg);
 }
 
-table.gpte-enhanced tbody tr:nth-child(even) td {
+table.gpte-enhanced tbody tr.gpte-row-even td {
   background-color: color-mix(in srgb, var(--bs-primary, #6a727a) var(--gpte-row-even-mix), var(--gpte-mix-base));
 }
 
