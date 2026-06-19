@@ -6,11 +6,21 @@ const COL_ATTR = 'data-gpte-col';
 const SORTABLE_CLASS = 'gpte-sortable';
 const SORTED_ASC_CLASS = 'gpte-sorted-asc';
 const SORTED_DESC_CLASS = 'gpte-sorted-desc';
+const FILTER_BAR_ATTR = 'data-gpte-filter-bar';
+const FILTER_FOOTER_ATTR = 'data-gpte-filter-footer';
+const NO_FILTER_ATTR = 'data-no-filter';
 
 type SortDir = 'asc' | 'desc' | 'none';
 type ColType = 'number' | 'date' | 'string';
 
+interface FilterRefs {
+  bar: HTMLDivElement;
+  footer: HTMLDivElement;
+  handler: () => void;
+}
+
 const tableListeners = new WeakMap<HTMLTableElement, (e: MouseEvent) => void>();
+const filterRefs = new WeakMap<HTMLTableElement, FilterRefs>();
 
 function isHiddenContext(): boolean {
   const path = location.pathname;
@@ -23,6 +33,40 @@ function isHiddenContext(): boolean {
     document.body.classList.contains('modal-open')
   ) return true;
   return false;
+}
+
+function updateFilterFooter(footer: HTMLDivElement, query: string, visible: number, total: number): void {
+  if (!query) {
+    footer.hidden = true;
+    return;
+  }
+  footer.hidden = false;
+  footer.textContent = `${visible} / ${total} 件`;
+}
+
+function applyFilter(table: HTMLTableElement, query: string): void {
+  const refs = filterRefs.get(table);
+  const tbody = table.querySelector('tbody');
+  if (!tbody || !refs) return;
+
+  const tokens = query.trim().toLowerCase().split(/[\s　]+/).filter(Boolean);
+  let visible = 0;
+  let total = 0;
+
+  for (const row of Array.from(tbody.querySelectorAll<HTMLTableRowElement>(':scope > tr'))) {
+    total++;
+    if (tokens.length === 0) {
+      row.style.display = '';
+      visible++;
+    } else {
+      const text = (row.textContent ?? '').toLowerCase();
+      const hit = tokens.every(t => text.includes(t));
+      row.style.display = hit ? '' : 'none';
+      if (hit) visible++;
+    }
+  }
+
+  updateFilterFooter(refs.footer, query, visible, total);
 }
 
 function parseNumeric(s: string): number {
@@ -145,9 +189,42 @@ function enhanceTable(table: HTMLTableElement): void {
 
   table.setAttribute(ENHANCED_ATTR, '1');
   table.classList.add('gpte-enhanced');
+
+  if (!table.hasAttribute(NO_FILTER_ATTR)) {
+    const bar = document.createElement('div');
+    bar.setAttribute(FILTER_BAR_ATTR, '1');
+
+    const input = document.createElement('input');
+    input.type = 'search';
+    input.placeholder = 'フィルタ...';
+    input.setAttribute('aria-label', 'テーブルをフィルタ');
+    bar.appendChild(input);
+
+    const footer = document.createElement('div');
+    footer.setAttribute(FILTER_FOOTER_ATTR, '1');
+    footer.setAttribute('aria-live', 'polite');
+    footer.hidden = true;
+
+    const filterHandler = () => applyFilter(table, input.value);
+    input.addEventListener('input', filterHandler);
+
+    filterRefs.set(table, { bar, footer, handler: filterHandler });
+
+    table.insertAdjacentElement('beforebegin', bar);
+    table.insertAdjacentElement('afterend', footer);
+  }
 }
 
 function cleanupTable(table: HTMLTableElement): void {
+  const refs = filterRefs.get(table);
+  if (refs) {
+    const input = refs.bar.querySelector<HTMLInputElement>('input');
+    if (input) input.removeEventListener('input', refs.handler);
+    refs.bar.remove();
+    refs.footer.remove();
+    filterRefs.delete(table);
+  }
+
   const tbody = table.querySelector('tbody');
   if (tbody) {
     const rows = Array.from(tbody.querySelectorAll<HTMLTableRowElement>(':scope > tr'));
@@ -157,6 +234,7 @@ function cleanupTable(table: HTMLTableElement): void {
     );
     const frag = document.createDocumentFragment();
     for (const row of rows) {
+      row.style.display = '';
       row.removeAttribute(ORIG_INDEX_ATTR);
       frag.appendChild(row);
     }
