@@ -9,6 +9,7 @@ const SORTED_DESC_CLASS = 'gpte-sorted-desc';
 const FILTER_BAR_ATTR = 'data-gpte-filter-bar';
 const FILTER_FOOTER_ATTR = 'data-gpte-filter-footer';
 const NO_FILTER_ATTR = 'data-no-filter';
+const NO_STICKY_ATTR = 'data-no-sticky';
 
 type SortDir = 'asc' | 'desc' | 'none';
 type ColType = 'number' | 'date' | 'string';
@@ -189,6 +190,9 @@ function enhanceTable(table: HTMLTableElement): void {
 
   table.setAttribute(ENHANCED_ATTR, '1');
   table.classList.add('gpte-enhanced');
+  if (!table.hasAttribute(NO_STICKY_ATTR)) {
+    table.classList.add('gpte-sticky-head');
+  }
 
   if (!table.hasAttribute(NO_FILTER_ATTR)) {
     const bar = document.createElement('div');
@@ -256,7 +260,7 @@ function cleanupTable(table: HTMLTableElement): void {
   }
 
   table.removeAttribute(ENHANCED_ATTR);
-  table.classList.remove('gpte-enhanced');
+  table.classList.remove('gpte-enhanced', 'gpte-sticky-head');
 }
 
 function scanAndEnhance(): void {
