@@ -189,14 +189,37 @@ th.gpte-sorted-desc::after {
   outline-offset: 1px;
 }
 
+[data-gpte-copy-btn] .gpte-copy-badge-bg {
+  fill: var(--gpte-input-bg);
+}
+
+@keyframes gpte-copy-bg-flash-ok {
+  0%   { background-color: color-mix(in srgb, var(--bs-success, #198754) 28%, var(--gpte-input-bg)); }
+  100% { background-color: var(--gpte-input-bg); }
+}
+
+@keyframes gpte-copy-bg-flash-fail {
+  0%   { background-color: color-mix(in srgb, var(--bs-danger, #dc3545) 28%, var(--gpte-input-bg)); }
+  100% { background-color: var(--gpte-input-bg); }
+}
+
 [data-gpte-copy-btn].gpte-copy-ok {
   color: var(--bs-success, #198754);
   border-color: var(--bs-success, #198754);
+  animation: gpte-copy-bg-flash-ok 0.4s ease-out;
 }
 
 [data-gpte-copy-btn].gpte-copy-fail {
   color: var(--bs-danger, #dc3545);
   border-color: var(--bs-danger, #dc3545);
+  animation: gpte-copy-bg-flash-fail 0.4s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-gpte-copy-btn].gpte-copy-ok,
+  [data-gpte-copy-btn].gpte-copy-fail {
+    animation: none;
+  }
 }
 
 /* Filter footer (row count) */

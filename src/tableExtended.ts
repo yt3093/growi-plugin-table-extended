@@ -256,10 +256,40 @@ function makeCopyIcon(): SVGSVGElement {
   ]);
 }
 
-function makeCheckIcon(): SVGSVGElement {
-  return buildSvg([
-    { tag: 'path', attrs: { d: 'M20 6 9 17l-5-5' } },
+function appendCheckBadge(svg: SVGSVGElement): void {
+  svg.appendChild(createSvgEl('circle', {
+    cx: '18', cy: '18', r: '5.5',
+    stroke: 'currentColor', 'stroke-width': '1.5',
+    class: 'gpte-copy-badge-bg',
+  }));
+  svg.appendChild(createSvgEl('path', {
+    d: 'M15.5 18.2l1.8 1.8 3.2-3.5',
+    stroke: 'currentColor', 'stroke-width': '1.8',
+    'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+    fill: 'none',
+  }));
+}
+
+function makeCsvOkIcon(): SVGSVGElement {
+  const svg = buildSvg([
+    { tag: 'rect', attrs: { x: '2', y: '2', width: '16', height: '16', rx: '1.5' } },
+    { tag: 'path', attrs: { d: 'M2 7.5h16' } },
+    { tag: 'path', attrs: { d: 'M2 12.5h16' } },
+    { tag: 'path', attrs: { d: 'M7 2v16' } },
+    { tag: 'path', attrs: { d: 'M13 2v16' } },
   ]);
+  appendCheckBadge(svg);
+  return svg;
+}
+
+function makeMdOkIcon(): SVGSVGElement {
+  const svg = buildSvg([
+    { tag: 'rect', attrs: { x: '2', y: '4', width: '16', height: '14', rx: '1.5' } },
+    { tag: 'path', attrs: { d: 'M5 14V8l2.5 3 2.5-3v6' } },
+    { tag: 'path', attrs: { d: 'M14 8v6m-1.8-1.8L14 14l1.8-1.8' } },
+  ]);
+  appendCheckBadge(svg);
+  return svg;
 }
 
 function makeFailIcon(): SVGSVGElement {
@@ -275,28 +305,26 @@ function setCopyBtnState(btn: HTMLButtonElement, state: CopyBtnState): void {
 
   let icon: SVGSVGElement;
   let label: string;
-  let titleText: string;
 
   if (state === 'ok-csv') {
-    icon = makeCheckIcon();
-    label = titleText = 'CSVコピー済み';
+    icon = makeCsvOkIcon();
+    label = 'CSV でクリップボードにコピーしました';
     btn.classList.add(COPY_CLASS_OK);
   } else if (state === 'ok-md') {
-    icon = makeCheckIcon();
-    label = titleText = 'Markdownコピー済み';
+    icon = makeMdOkIcon();
+    label = 'Markdown でクリップボードにコピーしました';
     btn.classList.add(COPY_CLASS_OK);
   } else if (state === 'fail') {
     icon = makeFailIcon();
-    label = titleText = 'コピー失敗';
+    label = 'クリップボードへのコピーに失敗しました';
     btn.classList.add(COPY_CLASS_FAIL);
   } else {
     icon = makeCopyIcon();
     label = 'コピー (クリック: CSV / Shift+クリック: Markdown)';
-    titleText = 'クリック: CSV / Shift+クリック: Markdown';
   }
 
   btn.setAttribute('aria-label', label);
-  btn.title = titleText;
+  btn.title = label;
   btn.appendChild(icon);
 }
 
