@@ -12,6 +12,7 @@ const NO_FILTER_ATTR = 'data-no-filter';
 const NO_STICKY_ATTR = 'data-no-sticky';
 const ROW_ODD_CLASS = 'gpte-row-odd';
 const ROW_EVEN_CLASS = 'gpte-row-even';
+const MARK_CLASS = 'gpte-mark';
 
 // GROWI のナビバー要素を検索するセレクタ候補（上から順に試す）
 const NAVBAR_SELECTORS = [
@@ -82,12 +83,99 @@ function restripeRows(table: HTMLTableElement): void {
   }
 }
 
+function unwrapHighlights(table: HTMLTableElement): void {
+  const marks = Array.from(table.querySelectorAll<HTMLElement>(`tbody mark.${MARK_CLASS}`));
+  const parents = new Set<Node>();
+  for (const mark of marks) {
+    if (mark.parentNode) parents.add(mark.parentNode);
+    mark.replaceWith(...Array.from(mark.childNodes));
+  }
+  for (const parent of parents) {
+    (parent as Element).normalize();
+  }
+}
+
+function highlightMatches(table: HTMLTableElement, tokens: string[]): void {
+  if (tokens.length === 0) return;
+  const lowerTokens = tokens.map(t => t.toLowerCase());
+
+  const tbody = table.querySelector('tbody');
+  if (!tbody) return;
+
+  const rows = Array.from(tbody.querySelectorAll<HTMLTableRowElement>(':scope > tr')).filter(
+    r => r.style.display !== 'none'
+  );
+
+  for (const row of rows) {
+    const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const parent = node.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        const tag = parent.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE') return NodeFilter.FILTER_REJECT;
+        if (parent.classList.contains(MARK_CLASS)) return NodeFilter.FILTER_REJECT;
+        if (parent.closest('thead')) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+
+    const textNodes: Text[] = [];
+    let node: Node | null;
+    while ((node = walker.nextNode())) textNodes.push(node as Text);
+
+    for (const textNode of textNodes) {
+      const text = textNode.nodeValue ?? '';
+      const lower = text.toLowerCase();
+
+      // 全トークンのマッチ位置を収集
+      const ranges: [number, number][] = [];
+      for (const token of lowerTokens) {
+        let from = 0;
+        let pos: number;
+        while ((pos = lower.indexOf(token, from)) !== -1) {
+          ranges.push([pos, pos + token.length]);
+          from = pos + token.length;
+        }
+      }
+      if (ranges.length === 0) continue;
+
+      // start 昇順ソートし重なりをマージ
+      ranges.sort((a, b) => a[0] - b[0]);
+      const merged: [number, number][] = [ranges[0]];
+      for (let i = 1; i < ranges.length; i++) {
+        const last = merged[merged.length - 1];
+        if (ranges[i][0] <= last[1]) {
+          last[1] = Math.max(last[1], ranges[i][1]);
+        } else {
+          merged.push(ranges[i]);
+        }
+      }
+
+      // 末尾から先頭の順に splitText → mark で wrap
+      let current: Text = textNode;
+      for (let i = merged.length - 1; i >= 0; i--) {
+        const [start, end] = merged[i];
+        const after = current.splitText(end);
+        const middle = current.splitText(start);
+        const mark = document.createElement('mark');
+        mark.className = MARK_CLASS;
+        mark.appendChild(middle);
+        after.parentNode!.insertBefore(mark, after);
+        current = after;
+      }
+    }
+  }
+}
+
 function applyFilter(table: HTMLTableElement, query: string): void {
   const refs = filterRefs.get(table);
   const tbody = table.querySelector('tbody');
   if (!tbody || !refs) return;
 
   const tokens = query.trim().toLowerCase().split(/[\s　]+/).filter(Boolean);
+
+  unwrapHighlights(table);
+
   let visible = 0;
   let total = 0;
 
@@ -105,6 +193,7 @@ function applyFilter(table: HTMLTableElement, query: string): void {
   }
 
   restripeRows(table);
+  if (tokens.length > 0) highlightMatches(table, tokens);
   updateFilterFooter(refs.footer, query, visible, total);
 }
 
@@ -265,6 +354,8 @@ function enhanceTable(table: HTMLTableElement): void {
 }
 
 function cleanupTable(table: HTMLTableElement): void {
+  unwrapHighlights(table);
+
   const refs = filterRefs.get(table);
   if (refs) {
     const input = refs.bar.querySelector<HTMLInputElement>('input');

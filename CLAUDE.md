@@ -19,6 +19,7 @@
 | ダークモード | `@media (prefers-color-scheme: dark)` と `html[data-bs-theme="dark"]`（Bootstrap 5.3 GROWI UI トグル）の双方で CSS 変数を上書き |
 | 元順保持 | 初期化時に各 `<tr>` へ `data-gpte-original-index` を付与し、3 回目クリックで復元 |
 | フィルタ | テーブル上部に検索ボックス 1 つ。全列対象・大小文字無視の部分一致。スペース区切りで AND 絞り込み |
+| マッチハイライト | フィルタ一致テキストを `<mark class="gpte-mark">` で wrap し背景色強調。クエリ空で全解除。textNode 単位のため `<strong>` 等のインライン要素を跨ぐマッチは描画されない（行表示判定は従来通り `textContent` 全体で機能）。印刷時は背景を透明化 |
 | 行数カウント | フィルタ入力中のみテーブル下部に「M / N 件」を表示（空クリアで非表示） |
 | 適用除外 | `thead` なし / `th` 0 個 / `data-no-sort` 属性付きテーブル / 既に `data-gpte-enhanced` 付き |
 | フィルタ除外 | `data-no-filter` 属性付きテーブルではフィルタ UI のみ非表示（ソートは有効） |
@@ -148,6 +149,14 @@ CSS の `tr:nth-child(odd/even)` は `display: none` の行も子要素として
 
 解決策：`table.insertAdjacentElement('beforebegin', bar)` と `table.insertAdjacentElement('afterend', footer)` で sibling として挿入する。filter 用 div は `<table>` を含まないため MutationObserver の再スキャン判定をすり抜ける。cleanup は `.remove()` 一発で完了。
 
+### 9. ハイライトは textNode 単位で行う（HTML 全体に対する正規表現 replace を使わない）
+
+セル内 HTML を `innerHTML` で書き換える方式は XSS リスクと既存リンクのイベント破壊が起きる。`TreeWalker(SHOW_TEXT)` で textNode を 1 つずつ走査し、`splitText` で範囲を切り出して `createElement('mark')` で wrap する。
+
+再フィルタ時は `mark.gpte-mark` を `replaceWith(...childNodes)` で外し、親要素に `normalize()` を呼んで隣接 textNode を統合する（これがないと次回の `indexOf` 位置がズレる）。
+
+textNode の境界を跨ぐマッチ（例: `<strong>東京</strong>都` で「東京都」を検索）はハイライトが付かない制約がある。行の表示判定は `row.textContent` 全体を見るため、マッチした行は正しく表示される。
+
 ## デプロイ手順
 
 ```bash
@@ -194,6 +203,18 @@ GROWI 管理画面 `/admin/plugins` で **削除 → 再インストール**。
 31. 編集モード移行時は sticky も解除され、閲覧モード復帰で再度固定される
 32. 印刷プレビューでスティッキーが解除され（`position: static`）、影も消える
 33. プラグイン無効化で `gpte-sticky-head` クラスが全テーブルから削除される
+34. フィルタ入力でマッチした `td` 内テキストが黄色（warning 系）背景でハイライトされる
+35. 複数トークン（「東京 2025」）入力で、各トークンの該当箇所がすべてハイライトされる
+36. 大文字小文字混在クエリで同じ箇所がハイライトされる（「Tokyo」「TOKYO」「tokyo」）
+37. クエリをクリアすると `<mark>` が消えセルが元の DOM 状態に戻る
+38. クエリを連続変更しても前回のハイライトが残らず、`<mark>` がネストしない
+39. `<th>` 内のヘッダーテキストはハイライトされない（編集ボタンが従来通り押せる）
+40. `<a>` 内テキストがマッチしてもリンクは有効なまま（クリック可）
+41. ハイライト中にソートしても `<mark>` は維持され、ソート結果が正しい
+42. ダークモード（OS / GROWI UI トグル両方）でハイライトのコントラストが保たれる
+43. 印刷プレビューでハイライト背景が消え、テキストのみ印字される
+44. プラグイン無効化で全テーブルから `<mark class="gpte-mark">` が消え、textContent が完全に元通り
+45. 編集モード遷移でハイライトが消え、復帰後の新規フィルタで再付与される
 
 ## 会話ガイドライン
 
