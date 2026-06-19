@@ -12,14 +12,13 @@ const NO_FILTER_ATTR = 'data-no-filter';
 const NO_STICKY_ATTR = 'data-no-sticky';
 
 // GROWI のナビバー要素を検索するセレクタ候補（上から順に試す）
-// DevTools で実際のセレクタを確認したらここを修正する
 const NAVBAR_SELECTORS = [
+  '#grw-contextual-sub-nav',       // GROWI v7+ contextual sub-navigation
+  '[data-testid="grw-contextual-sub-nav"]',
   '.grw-app-header',
   '.grw-navigation-header',
   'nav.navbar.fixed-top',
   'nav.navbar.sticky-top',
-  '.navbar-fixed-top',
-  'header.fixed-top',
 ];
 
 type SortDir = 'asc' | 'desc' | 'none';
