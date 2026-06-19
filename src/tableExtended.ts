@@ -176,17 +176,21 @@ function highlightMatches(table: HTMLTableElement, tokens: string[]): void {
   }
 }
 
-function getCopyCellText(cell: Element): string {
-  return (cell.textContent ?? '')
+function getCopyCellText(cell: Element, brReplacement: string): string {
+  const clone = cell.cloneNode(true) as Element;
+  for (const br of Array.from(clone.querySelectorAll('br'))) {
+    br.replaceWith(brReplacement);
+  }
+  return (clone.textContent ?? '')
     .replace(/\s*\r?\n\s*/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-function extractRows(table: HTMLTableElement): { header: string[]; rows: string[][] } {
+function extractRows(table: HTMLTableElement, brReplacement: string): { header: string[]; rows: string[][] } {
   const thead = table.querySelector('thead');
   const header = thead
-    ? Array.from(thead.querySelectorAll<HTMLTableCellElement>('tr > th')).map(getCopyCellText)
+    ? Array.from(thead.querySelectorAll<HTMLTableCellElement>('tr > th')).map(th => getCopyCellText(th, brReplacement))
     : [];
   const tbody = table.querySelector('tbody');
   const bodyRows: string[][] = [];
@@ -194,7 +198,7 @@ function extractRows(table: HTMLTableElement): { header: string[]; rows: string[
     for (const row of Array.from(tbody.querySelectorAll<HTMLTableRowElement>(':scope > tr'))) {
       if (row.style.display === 'none') continue;
       bodyRows.push(
-        Array.from(row.querySelectorAll<HTMLTableCellElement>(':scope > td')).map(getCopyCellText)
+        Array.from(row.querySelectorAll<HTMLTableCellElement>(':scope > td')).map(td => getCopyCellText(td, brReplacement))
       );
     }
   }
@@ -209,7 +213,7 @@ function toCsv({ header, rows }: { header: string[]; rows: string[][] }): string
   const lines: string[] = [];
   if (header.length) lines.push(header.map(csvEscape).join(','));
   for (const r of rows) lines.push(r.map(csvEscape).join(','));
-  return lines.join('\r\n');
+  return lines.join('\n');
 }
 
 function mdEscape(v: string): string {
@@ -240,7 +244,7 @@ function flashCopyLabel(table: HTMLTableElement, btn: HTMLButtonElement, label: 
 }
 
 function handleCopyClick(table: HTMLTableElement, btn: HTMLButtonElement, shift: boolean): void {
-  const data = extractRows(table);
+  const data = extractRows(table, shift ? '<br>' : ' ');
   const text = shift ? toMarkdown(data) : toCsv(data);
   const okLabel = shift ? COPY_LABEL_MD_OK : COPY_LABEL_CSV_OK;
   navigator.clipboard.writeText(text).then(
