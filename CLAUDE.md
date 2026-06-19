@@ -22,10 +22,12 @@
 | 行数カウント | フィルタ入力中のみテーブル下部に「M / N 件」を表示（空クリアで非表示） |
 | 適用除外 | `thead` なし / `th` 0 個 / `data-no-sort` 属性付きテーブル / 既に `data-gpte-enhanced` 付き |
 | フィルタ除外 | `data-no-filter` 属性付きテーブルではフィルタ UI のみ非表示（ソートは有効） |
-| 非表示条件 | 編集モード（`/edit`, `#edit`, `body.editing`, `body.modal-open`）・管理画面（`/admin`）・印刷時は矢印・フィルタ UI 非表示かつソート無効 |
+| スティッキーヘッダー | スクロール時に `thead` を画面上部に固定。GROWI ナビバー（`NAVBAR_SELECTORS` 優先順で検出）の高さを JS が自動取得し `--gpte-sticky-top` を inline style で設定。`ResizeObserver` でナビバー高さの変化に動的追従。手動上書きは CSS 変数 `--gpte-sticky-top` で可能（デフォルト `0px`）。固定時に薄い下方向 `box-shadow` を付与 |
+| スティッキー除外 | `data-no-sticky` 属性付きテーブルでは sticky を無効化（ソート/フィルタは有効） |
+| 非表示条件 | 編集モード（`/edit`, `#edit`, `body.editing`, `body.modal-open`）・管理画面（`/admin`）・印刷時は矢印・フィルタ UI 非表示かつソート無効。印刷時はスティッキーも解除 |
 | SPA 遷移 | `pushState` / `replaceState` モンキーパッチ + `popstate` + `hashchange` で再スキャン |
 | 新規テーブル追加 | `MutationObserver`（`childList: true, subtree: true`）で `<table>` 追加を検知して自動初期化 |
-| deactivate | 全 listener 解除・MutationObserver.disconnect・モンキーパッチ復元・付与した `gpte-enhanced` / `gpte-sortable` / `gpte-sorted-*` クラスと `aria-sort` / `data-gpte-*` 属性を全削除・フィルタ UI 削除・行の `display` / 行順を復元 |
+| deactivate | 全 listener 解除・MutationObserver.disconnect・ResizeObserver.disconnect・モンキーパッチ復元・付与した `gpte-enhanced` / `gpte-sortable` / `gpte-sorted-*` クラスと `aria-sort` / `data-gpte-*` 属性を全削除・フィルタ UI 削除・行の `display` / 行順を復元 |
 
 ## アーキテクチャ
 
@@ -57,11 +59,13 @@ growi-plugin-table-extended/
 **`createTableExtended()`** が公開 API で `{ mount, unmount }` を返す。
 
 - **`scanAndEnhance()`**: `document.querySelectorAll('table')` でページ上の全テーブルをスキャンし、対象判定をパスしたものに `enhanceTable()` を呼ぶ。`isHiddenContext()` が true の場合は何もしない。
-- **`enhanceTable(table)`**: 各 `th` に `data-gpte-col` / `aria-sort` / `.gpte-sortable` を付与（矢印は CSS `::after` で描画するため span 挿入は行わない）。`tbody > tr` 全件に `data-gpte-original-index` を付与。イベントはクリック委譲で `thead` に 1 つだけ登録し、`WeakMap` に参照を保持。テーブルに `data-gpte-enhanced="1"` と `.gpte-enhanced` クラスを付与して二重初期化を防ぎ、視覚スタイル（CSS `table.gpte-enhanced` セレクタ）を適用する。`data-no-filter` がなければフィルタバー（`[data-gpte-filter-bar]`）を table の直前の sibling として、カウントフッター（`[data-gpte-filter-footer]`）を直後の sibling として挿入し、`FilterRefs` を `WeakMap` で table に紐付ける。
+- **`enhanceTable(table)`**: 各 `th` に `data-gpte-col` / `aria-sort` / `.gpte-sortable` を付与（矢印は CSS `::after` で描画するため span 挿入は行わない）。`tbody > tr` 全件に `data-gpte-original-index` を付与。イベントはクリック委譲で `thead` に 1 つだけ登録し、`WeakMap` に参照を保持。テーブルに `data-gpte-enhanced="1"` と `.gpte-enhanced` クラスを付与して二重初期化を防ぎ、視覚スタイル（CSS `table.gpte-enhanced` セレクタ）を適用する。`data-no-sticky` がなければ `.gpte-sticky-head` クラスを追加してスティッキーヘッダーを有効化する（CSS `table.gpte-enhanced.gpte-sticky-head thead th` セレクタで `position: sticky` 適用）。`data-no-filter` がなければフィルタバー（`[data-gpte-filter-bar]`）を table の直前の sibling として、カウントフッター（`[data-gpte-filter-footer]`）を直後の sibling として挿入し、`FilterRefs` を `WeakMap` で table に紐付ける。
 - **`sortRows(table, colIdx, dir)`**: `tbody > tr` を配列化し、列値から `detectColumnType()` で数値 / 日付 / 文字列を判定。比較関数でソートして DocumentFragment で再 append。`dir === 'none'` は `data-gpte-original-index` 昇順で復元。各行の `style.display`（フィルタによる非表示状態）は inline style として保持されるため、ソート後も非表示が維持される。
 - **`applyFilter(table, query)`**: クエリを空白で分割してトークン化し、`tbody > tr` 全行の `textContent` に対して全トークンが含まれる行のみ `display: ''`、それ以外を `display: 'none'` にする。空クエリ時は全行を復元。処理後に `updateFilterFooter()` を呼んでカウントを更新。
 - **`updateFilterFooter(footer, query, visible, total)`**: クエリが空なら `footer.hidden = true`。非空なら `footer.hidden = false` にして `textContent` を「M / N 件」形式で書き込む（`innerHTML` は使わない）。
-- **`cleanupTable(table)`**: `filterRefs` WeakMap からフィルタ UI の参照を取り出し、input の `'input'` イベントを解除してバー・フッターを `.remove()`。`tbody > tr` の `style.display` を全て `''` に戻してから `data-gpte-original-index` 昇順で行を復元。付与した属性・クラス（`gpte-sortable` / `gpte-sorted-*`）を全 `th` から削除。`thead` のクリックハンドラを `WeakMap` から取り出して `removeEventListener`。テーブルから `data-gpte-enhanced` 属性と `.gpte-enhanced` クラスを削除して視覚スタイルを解除する。
+- **`cleanupTable(table)`**: `filterRefs` WeakMap からフィルタ UI の参照を取り出し、input の `'input'` イベントを解除してバー・フッターを `.remove()`。`tbody > tr` の `style.display` を全て `''` に戻してから `data-gpte-original-index` 昇順で行を復元。付与した属性・クラス（`gpte-sortable` / `gpte-sorted-*`）を全 `th` から削除。`thead` のクリックハンドラを `WeakMap` から取り出して `removeEventListener`。テーブルから `data-gpte-enhanced` 属性・`.gpte-enhanced` クラス・`.gpte-sticky-head` クラスをまとめて削除して視覚スタイルとスティッキーを解除する。
+- **`findNavbarEl()`**: `NAVBAR_SELECTORS` を上から順に試し、`offsetHeight > 0` の要素を返す。見つからなければ `null`。`getNavbarHeight()` はこれを内部で呼んで高さのみを返すラッパー。
+- **ResizeObserver（`navbarObserver`）**: `mount()` 時に `findNavbarEl()` でナビバー要素を取得し、見つかった場合は `ResizeObserver` をアタッチ。ナビバーのサイズ変化のたびに `table[data-gpte-enhanced].gpte-sticky-head` 全件の `--gpte-sticky-top` を `style.setProperty` で更新する。`unmount()` で `navbarObserver.disconnect()` してクリーンアップ。
 - **SPA 遷移検知**: `pushState` / `replaceState` にカスタムイベント `'growi-pte-navigate'` をモンキーパッチ。`popstate` / `hashchange` も購読し、いずれも 2 段 `requestAnimationFrame` で DOM が安定してから `scanAndEnhance()` を実行。
 - **MutationObserver**: `document.body` を `childList: true, subtree: true, attributes: true, attributeFilter: ['class']` で監視。新しい `<table>` 追加時は `scheduleScan()` を呼ぶ。`body.class` 変化時（編集モード遷移）は `isHiddenContext()` を判定し、true（編集モードへ移行）なら enhance 済みテーブルを即 `cleanupTable` し、false（閲覧モードへ復帰）なら `scheduleScan()` を呼ぶ。
 - **編集モード判定**: `location.hash === '#edit'` / `pathname.endsWith('/edit')` / `body.classList.contains('editing')` / `body.classList.contains('grw-editor-mode')` / `body.classList.contains('modal-open')`（GROWI テーブル編集モーダル）のいずれかで判定。
@@ -175,6 +179,15 @@ GROWI 管理画面 `/admin/plugins` で **削除 → 再インストール**。
 22. 編集モード移行時はフィルタ UI も消え、閲覧モード復帰で再表示される
 23. プラグイン無効化でフィルタ UI 削除・全行の `display` が復元される
 24. 印刷プレビューでフィルタ入力欄・行数カウントが非表示になる
+25. 縦長テーブルを下にスクロールしたとき、`thead` が画面上部に固定されたまま見え続ける
+26. 固定中の `thead` に薄い下方向の影（`box-shadow`）が表示される
+27. GROWI ナビバーの高さが自動検出され、ヘッダーがナビバーの直下に固定される
+28. ナビバーの高さが動的に変化した場合（展開/折りたたみ等）も固定位置が追従する
+29. `--gpte-sticky-top: 60px` を CSS で指定すると自動検出を上書きして 60px 下に固定される
+30. `<table data-no-sticky>` 属性付きテーブルでは sticky にならない（ソート/フィルタは有効）
+31. 編集モード移行時は sticky も解除され、閲覧モード復帰で再度固定される
+32. 印刷プレビューでスティッキーが解除され（`position: static`）、影も消える
+33. プラグイン無効化で `gpte-sticky-head` クラスが全テーブルから削除される
 
 ## 会話ガイドライン
 

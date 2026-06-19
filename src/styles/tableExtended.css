@@ -161,6 +161,14 @@ th.gpte-sorted-desc::after {
   text-align: right;
 }
 
+/* Sticky header */
+table.gpte-enhanced.gpte-sticky-head thead th {
+  position: sticky;
+  top: var(--gpte-sticky-top, 0px);
+  z-index: 2;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
 @media print {
   [data-gpte-filter-bar],
   [data-gpte-filter-footer] {
@@ -173,5 +181,10 @@ th.gpte-sorted-desc::after {
 
   th.gpte-sortable {
     cursor: default;
+  }
+
+  table.gpte-enhanced.gpte-sticky-head thead th {
+    position: static;
+    box-shadow: none;
   }
 }

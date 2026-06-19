@@ -9,6 +9,17 @@ const SORTED_DESC_CLASS = 'gpte-sorted-desc';
 const FILTER_BAR_ATTR = 'data-gpte-filter-bar';
 const FILTER_FOOTER_ATTR = 'data-gpte-filter-footer';
 const NO_FILTER_ATTR = 'data-no-filter';
+const NO_STICKY_ATTR = 'data-no-sticky';
+
+// GROWI のナビバー要素を検索するセレクタ候補（上から順に試す）
+const NAVBAR_SELECTORS = [
+  '#grw-contextual-sub-nav',       // GROWI v7+ contextual sub-navigation
+  '[data-testid="grw-contextual-sub-nav"]',
+  '.grw-app-header',
+  '.grw-navigation-header',
+  'nav.navbar.fixed-top',
+  'nav.navbar.sticky-top',
+];
 
 type SortDir = 'asc' | 'desc' | 'none';
 type ColType = 'number' | 'date' | 'string';
@@ -21,6 +32,18 @@ interface FilterRefs {
 
 const tableListeners = new WeakMap<HTMLTableElement, (e: MouseEvent) => void>();
 const filterRefs = new WeakMap<HTMLTableElement, FilterRefs>();
+
+function findNavbarEl(): HTMLElement | null {
+  for (const selector of NAVBAR_SELECTORS) {
+    const el = document.querySelector<HTMLElement>(selector);
+    if (el && el.offsetHeight > 0) return el;
+  }
+  return null;
+}
+
+function getNavbarHeight(): number {
+  return findNavbarEl()?.offsetHeight ?? 0;
+}
 
 function isHiddenContext(): boolean {
   const path = location.pathname;
@@ -189,6 +212,13 @@ function enhanceTable(table: HTMLTableElement): void {
 
   table.setAttribute(ENHANCED_ATTR, '1');
   table.classList.add('gpte-enhanced');
+  if (!table.hasAttribute(NO_STICKY_ATTR)) {
+    table.classList.add('gpte-sticky-head');
+    const navbarHeight = getNavbarHeight();
+    if (navbarHeight > 0) {
+      table.style.setProperty('--gpte-sticky-top', `${navbarHeight}px`);
+    }
+  }
 
   if (!table.hasAttribute(NO_FILTER_ATTR)) {
     const bar = document.createElement('div');
@@ -256,7 +286,8 @@ function cleanupTable(table: HTMLTableElement): void {
   }
 
   table.removeAttribute(ENHANCED_ATTR);
-  table.classList.remove('gpte-enhanced');
+  table.classList.remove('gpte-enhanced', 'gpte-sticky-head');
+  table.style.removeProperty('--gpte-sticky-top');
 }
 
 function scanAndEnhance(): void {
@@ -268,6 +299,7 @@ function scanAndEnhance(): void {
 
 export function createTableExtended(): { mount(): void; unmount(): void } {
   let observer: MutationObserver | null = null;
+  let navbarObserver: ResizeObserver | null = null;
   let observerRafId: number | null = null;
   let scanRafId: number | null = null;
 
@@ -340,6 +372,23 @@ export function createTableExtended(): { mount(): void; unmount(): void } {
       attributeFilter: ['class'],
     });
 
+    const navbarEl = findNavbarEl();
+    if (navbarEl) {
+      navbarObserver = new ResizeObserver(() => {
+        const h = navbarEl.offsetHeight;
+        document.querySelectorAll<HTMLTableElement>(
+          `table[${ENHANCED_ATTR}].gpte-sticky-head`
+        ).forEach(t => {
+          if (h > 0) {
+            t.style.setProperty('--gpte-sticky-top', `${h}px`);
+          } else {
+            t.style.removeProperty('--gpte-sticky-top');
+          }
+        });
+      });
+      navbarObserver.observe(navbarEl);
+    }
+
     scheduleScan();
   }
 
@@ -354,6 +403,10 @@ export function createTableExtended(): { mount(): void; unmount(): void } {
     if (observer) {
       observer.disconnect();
       observer = null;
+    }
+    if (navbarObserver) {
+      navbarObserver.disconnect();
+      navbarObserver = null;
     }
     if (scanRafId !== null) {
       cancelAnimationFrame(scanRafId);
