@@ -299,6 +299,12 @@ function makeFailIcon(): SVGSVGElement {
   ]);
 }
 
+function makeFilterIcon(): SVGSVGElement {
+  return buildSvg([
+    { tag: 'path', attrs: { d: 'M3 4h18l-7 9v6l-4-2v-4z', 'stroke-linejoin': 'round' } },
+  ]);
+}
+
 function setCopyBtnState(btn: HTMLButtonElement, state: CopyBtnState): void {
   while (btn.firstChild) btn.removeChild(btn.firstChild);
   btn.classList.remove(COPY_CLASS_OK, COPY_CLASS_FAIL);
@@ -514,11 +520,20 @@ function enhanceTable(table: HTMLTableElement): void {
     const bar = document.createElement('div');
     bar.setAttribute(FILTER_BAR_ATTR, '1');
 
+    const wrap = document.createElement('span');
+    wrap.className = 'gpte-filter-input-wrap';
+
+    const filterIcon = makeFilterIcon();
+    filterIcon.classList.add('gpte-filter-icon');
+    filterIcon.setAttribute('aria-hidden', 'true');
+    wrap.appendChild(filterIcon);
+
     const input = document.createElement('input');
     input.type = 'search';
-    input.placeholder = 'フィルタ...';
     input.setAttribute('aria-label', 'テーブルをフィルタ');
-    bar.appendChild(input);
+    wrap.appendChild(input);
+
+    bar.appendChild(wrap);
 
     const footer = document.createElement('div');
     footer.setAttribute(FILTER_FOOTER_ATTR, '1');
