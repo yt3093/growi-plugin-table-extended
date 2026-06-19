@@ -13,6 +13,12 @@ const NO_STICKY_ATTR = 'data-no-sticky';
 const ROW_ODD_CLASS = 'gpte-row-odd';
 const ROW_EVEN_CLASS = 'gpte-row-even';
 const MARK_CLASS = 'gpte-mark';
+const COPY_BTN_ATTR = 'data-gpte-copy-btn';
+const COPY_CLASS_OK = 'gpte-copy-ok';
+const COPY_CLASS_FAIL = 'gpte-copy-fail';
+const COPY_FEEDBACK_MS = 2000;
+const SVG_NS = 'http://www.w3.org/2000/svg';
+type CopyBtnState = 'copy' | 'ok-csv' | 'ok-md' | 'fail';
 
 // GROWI のナビバー要素を検索するセレクタ候補（上から順に試す）
 const NAVBAR_SELECTORS = [
@@ -31,6 +37,9 @@ interface FilterRefs {
   bar: HTMLDivElement;
   footer: HTMLDivElement;
   handler: () => void;
+  copyBtn?: HTMLButtonElement;
+  copyHandler?: (e: MouseEvent) => void;
+  copyTimerId?: number;
 }
 
 const tableListeners = new WeakMap<HTMLTableElement, (e: MouseEvent) => void>();
@@ -165,6 +174,187 @@ function highlightMatches(table: HTMLTableElement, tokens: string[]): void {
       }
     }
   }
+}
+
+function getCopyCellText(cell: Element, brReplacement: string): string {
+  const clone = cell.cloneNode(true) as Element;
+  for (const br of Array.from(clone.querySelectorAll('br'))) {
+    br.replaceWith(brReplacement);
+  }
+  return (clone.textContent ?? '')
+    .replace(/\s*\r?\n\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractRows(table: HTMLTableElement, brReplacement: string): { header: string[]; rows: string[][] } {
+  const thead = table.querySelector('thead');
+  const header = thead
+    ? Array.from(thead.querySelectorAll<HTMLTableCellElement>('tr > th')).map(th => getCopyCellText(th, brReplacement))
+    : [];
+  const tbody = table.querySelector('tbody');
+  const bodyRows: string[][] = [];
+  if (tbody) {
+    for (const row of Array.from(tbody.querySelectorAll<HTMLTableRowElement>(':scope > tr'))) {
+      if (row.style.display === 'none') continue;
+      bodyRows.push(
+        Array.from(row.querySelectorAll<HTMLTableCellElement>(':scope > td')).map(td => getCopyCellText(td, brReplacement))
+      );
+    }
+  }
+  return { header, rows: bodyRows };
+}
+
+function csvEscape(v: string): string {
+  return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+}
+
+function toCsv({ header, rows }: { header: string[]; rows: string[][] }): string {
+  const lines: string[] = [];
+  if (header.length) lines.push(header.map(csvEscape).join(','));
+  for (const r of rows) lines.push(r.map(csvEscape).join(','));
+  return lines.join('\n');
+}
+
+function mdEscape(v: string): string {
+  return v.replace(/\|/g, '\\|');
+}
+
+function toMarkdown({ header, rows }: { header: string[]; rows: string[][] }): string {
+  if (header.length === 0) return '';
+  const lines: string[] = [];
+  lines.push(`| ${header.map(mdEscape).join(' | ')} |`);
+  lines.push(`| ${header.map(() => '---').join(' | ')} |`);
+  for (const r of rows) {
+    const padded = header.map((_, i) => mdEscape(r[i] ?? ''));
+    lines.push(`| ${padded.join(' | ')} |`);
+  }
+  return lines.join('\n');
+}
+
+function createSvgEl(tag: string, attrs: Record<string, string>): Element {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+function buildSvg(children: Array<{ tag: string; attrs: Record<string, string> }>): SVGSVGElement {
+  const svg = createSvgEl('svg', {
+    width: '15', height: '15', viewBox: '0 0 24 24',
+    fill: 'none', stroke: 'currentColor',
+    'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+    'aria-hidden': 'true',
+  }) as SVGSVGElement;
+  for (const { tag, attrs } of children) svg.appendChild(createSvgEl(tag, attrs));
+  return svg;
+}
+
+function makeCopyIcon(): SVGSVGElement {
+  return buildSvg([
+    { tag: 'rect', attrs: { width: '14', height: '14', x: '8', y: '8', rx: '2', ry: '2' } },
+    { tag: 'path', attrs: { d: 'M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2' } },
+  ]);
+}
+
+function appendCheckBadge(svg: SVGSVGElement): void {
+  svg.appendChild(createSvgEl('circle', {
+    cx: '18', cy: '18', r: '5.5',
+    stroke: 'currentColor', 'stroke-width': '1.5',
+    class: 'gpte-copy-badge-bg',
+  }));
+  svg.appendChild(createSvgEl('path', {
+    d: 'M15.5 18.2l1.8 1.8 3.2-3.5',
+    stroke: 'currentColor', 'stroke-width': '1.8',
+    'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+    fill: 'none',
+  }));
+}
+
+function makeCsvOkIcon(): SVGSVGElement {
+  const svg = buildSvg([
+    { tag: 'rect', attrs: { x: '2', y: '2', width: '16', height: '16', rx: '1.5' } },
+    { tag: 'path', attrs: { d: 'M2 7.5h16' } },
+    { tag: 'path', attrs: { d: 'M2 12.5h16' } },
+    { tag: 'path', attrs: { d: 'M7 2v16' } },
+    { tag: 'path', attrs: { d: 'M13 2v16' } },
+  ]);
+  appendCheckBadge(svg);
+  return svg;
+}
+
+function makeMdOkIcon(): SVGSVGElement {
+  const svg = buildSvg([
+    { tag: 'rect', attrs: { x: '2', y: '4', width: '16', height: '14', rx: '1.5' } },
+    { tag: 'path', attrs: { d: 'M5 14V8l2.5 3 2.5-3v6' } },
+    { tag: 'path', attrs: { d: 'M14 8v6m-1.8-1.8L14 14l1.8-1.8' } },
+  ]);
+  appendCheckBadge(svg);
+  return svg;
+}
+
+function makeFailIcon(): SVGSVGElement {
+  return buildSvg([
+    { tag: 'path', attrs: { d: 'M18 6 6 18' } },
+    { tag: 'path', attrs: { d: 'm6 6 12 12' } },
+  ]);
+}
+
+function makeFilterIcon(): SVGSVGElement {
+  return buildSvg([
+    { tag: 'path', attrs: { d: 'M3 4h18l-7 9v6l-4-2v-4z', 'stroke-linejoin': 'round' } },
+  ]);
+}
+
+function setCopyBtnState(btn: HTMLButtonElement, state: CopyBtnState): void {
+  while (btn.firstChild) btn.removeChild(btn.firstChild);
+  btn.classList.remove(COPY_CLASS_OK, COPY_CLASS_FAIL);
+
+  let icon: SVGSVGElement;
+  let label: string;
+
+  if (state === 'ok-csv') {
+    icon = makeCsvOkIcon();
+    label = 'CSV でクリップボードにコピーしました';
+    btn.classList.add(COPY_CLASS_OK);
+  } else if (state === 'ok-md') {
+    icon = makeMdOkIcon();
+    label = 'Markdown でクリップボードにコピーしました';
+    btn.classList.add(COPY_CLASS_OK);
+  } else if (state === 'fail') {
+    icon = makeFailIcon();
+    label = 'クリップボードへのコピーに失敗しました';
+    btn.classList.add(COPY_CLASS_FAIL);
+  } else {
+    icon = makeCopyIcon();
+    label = 'コピー (クリック: CSV / Shift+クリック: Markdown)';
+  }
+
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
+  btn.appendChild(icon);
+}
+
+function flashCopyState(table: HTMLTableElement, btn: HTMLButtonElement, state: 'ok-csv' | 'ok-md' | 'fail'): void {
+  const refs = filterRefs.get(table);
+  if (refs?.copyTimerId !== undefined) window.clearTimeout(refs.copyTimerId);
+  setCopyBtnState(btn, state);
+  const id = window.setTimeout(() => {
+    setCopyBtnState(btn, 'copy');
+    if (refs) refs.copyTimerId = undefined;
+  }, COPY_FEEDBACK_MS);
+  if (refs) refs.copyTimerId = id;
+}
+
+function handleCopyClick(table: HTMLTableElement, btn: HTMLButtonElement, shift: boolean): void {
+  const data = extractRows(table, shift ? '<br>' : ' ');
+  const text = shift ? toMarkdown(data) : toCsv(data);
+  navigator.clipboard.writeText(text).then(
+    () => flashCopyState(table, btn, shift ? 'ok-md' : 'ok-csv'),
+    (err) => {
+      console.warn('[gpte] clipboard write failed:', err);
+      flashCopyState(table, btn, 'fail');
+    },
+  );
 }
 
 function applyFilter(table: HTMLTableElement, query: string): void {
@@ -330,11 +520,20 @@ function enhanceTable(table: HTMLTableElement): void {
     const bar = document.createElement('div');
     bar.setAttribute(FILTER_BAR_ATTR, '1');
 
+    const wrap = document.createElement('span');
+    wrap.className = 'gpte-filter-input-wrap';
+
+    const filterIcon = makeFilterIcon();
+    filterIcon.classList.add('gpte-filter-icon');
+    filterIcon.setAttribute('aria-hidden', 'true');
+    wrap.appendChild(filterIcon);
+
     const input = document.createElement('input');
     input.type = 'search';
-    input.placeholder = 'フィルタ...';
     input.setAttribute('aria-label', 'テーブルをフィルタ');
-    bar.appendChild(input);
+    wrap.appendChild(input);
+
+    bar.appendChild(wrap);
 
     const footer = document.createElement('div');
     footer.setAttribute(FILTER_FOOTER_ATTR, '1');
@@ -345,6 +544,21 @@ function enhanceTable(table: HTMLTableElement): void {
     input.addEventListener('input', filterHandler);
 
     filterRefs.set(table, { bar, footer, handler: filterHandler });
+
+    if (typeof navigator.clipboard?.writeText === 'function') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.setAttribute(COPY_BTN_ATTR, '1');
+      setCopyBtnState(btn, 'copy');
+      const copyHandler = (e: MouseEvent) => handleCopyClick(table, btn, e.shiftKey);
+      btn.addEventListener('click', copyHandler);
+      bar.appendChild(btn);
+      const refs = filterRefs.get(table);
+      if (refs) {
+        refs.copyBtn = btn;
+        refs.copyHandler = copyHandler;
+      }
+    }
 
     table.insertAdjacentElement('beforebegin', bar);
     table.insertAdjacentElement('afterend', footer);
@@ -360,6 +574,10 @@ function cleanupTable(table: HTMLTableElement): void {
   if (refs) {
     const input = refs.bar.querySelector<HTMLInputElement>('input');
     if (input) input.removeEventListener('input', refs.handler);
+    if (refs.copyTimerId !== undefined) window.clearTimeout(refs.copyTimerId);
+    if (refs.copyBtn && refs.copyHandler) {
+      refs.copyBtn.removeEventListener('click', refs.copyHandler);
+    }
     refs.bar.remove();
     refs.footer.remove();
     filterRefs.delete(table);
