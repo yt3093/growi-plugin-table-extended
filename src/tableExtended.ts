@@ -33,12 +33,16 @@ interface FilterRefs {
 const tableListeners = new WeakMap<HTMLTableElement, (e: MouseEvent) => void>();
 const filterRefs = new WeakMap<HTMLTableElement, FilterRefs>();
 
-function getNavbarHeight(): number {
+function findNavbarEl(): HTMLElement | null {
   for (const selector of NAVBAR_SELECTORS) {
     const el = document.querySelector<HTMLElement>(selector);
-    if (el && el.offsetHeight > 0) return el.offsetHeight;
+    if (el && el.offsetHeight > 0) return el;
   }
-  return 0;
+  return null;
+}
+
+function getNavbarHeight(): number {
+  return findNavbarEl()?.offsetHeight ?? 0;
 }
 
 function isHiddenContext(): boolean {
@@ -295,6 +299,7 @@ function scanAndEnhance(): void {
 
 export function createTableExtended(): { mount(): void; unmount(): void } {
   let observer: MutationObserver | null = null;
+  let navbarObserver: ResizeObserver | null = null;
   let observerRafId: number | null = null;
   let scanRafId: number | null = null;
 
@@ -367,6 +372,23 @@ export function createTableExtended(): { mount(): void; unmount(): void } {
       attributeFilter: ['class'],
     });
 
+    const navbarEl = findNavbarEl();
+    if (navbarEl) {
+      navbarObserver = new ResizeObserver(() => {
+        const h = navbarEl.offsetHeight;
+        document.querySelectorAll<HTMLTableElement>(
+          `table[${ENHANCED_ATTR}].gpte-sticky-head`
+        ).forEach(t => {
+          if (h > 0) {
+            t.style.setProperty('--gpte-sticky-top', `${h}px`);
+          } else {
+            t.style.removeProperty('--gpte-sticky-top');
+          }
+        });
+      });
+      navbarObserver.observe(navbarEl);
+    }
+
     scheduleScan();
   }
 
@@ -381,6 +403,10 @@ export function createTableExtended(): { mount(): void; unmount(): void } {
     if (observer) {
       observer.disconnect();
       observer = null;
+    }
+    if (navbarObserver) {
+      navbarObserver.disconnect();
+      navbarObserver = null;
     }
     if (scanRafId !== null) {
       cancelAnimationFrame(scanRafId);
