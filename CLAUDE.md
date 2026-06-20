@@ -61,7 +61,12 @@ growi-plugin-table-extended/
 **`createTableExtended()`** が公開 API で `{ mount, unmount }` を返す。
 
 - **`scanAndEnhance()`**: `document.querySelectorAll('table')` でページ上の全テーブルをスキャンし、対象判定をパスしたものに `enhanceTable()` を呼ぶ。`isHiddenContext()` が true の場合は何もしない。
-- **`enhanceTable(table)`**: 各 `th` に `data-gpte-col` / `aria-sort` / `.gpte-sortable` を付与（矢印は CSS `::after` で描画するため span 挿入は行わない）。`tbody > tr` 全件に `data-gpte-original-index` を付与。イベントはクリック委譲で `thead` に 1 つだけ登録し、`WeakMap` に参照を保持。テーブルに `data-gpte-enhanced="1"` と `.gpte-enhanced` クラスを付与して二重初期化を防ぎ、視覚スタイル（CSS `table.gpte-enhanced` セレクタ）を適用する。`data-no-sticky` がなければ `.gpte-sticky-head` クラスを追加してスティッキーヘッダーを有効化する（CSS `table.gpte-enhanced.gpte-sticky-head thead th` セレクタで `position: sticky` 適用）。`data-no-filter` がなければフィルタバー（`[data-gpte-filter-bar]`）を table の直前の sibling として、カウントフッター（`[data-gpte-filter-footer]`）を直後の sibling として挿入し、`FilterRefs` を `WeakMap` で table に紐付ける。最後に `restripeRows()` を呼んで全行に `gpte-row-odd` / `gpte-row-even` クラスを付与する。
+- **`enhanceTable(table)`**: 全行に `data-gpte-original-index` を付与した後、4 つの `setup*` ヘルパーに責務分割して順に呼び出すコーディネータ。
+  - **`setupSortHeaders(table, thead)`**: 各 `th` に `data-gpte-col` / `aria-sort` / `.gpte-sortable` を付与（矢印は CSS `::after` で描画するため span 挿入は行わない）。クリックイベントは `thead` への委譲で 1 つだけ登録し、`tableListeners` WeakMap に保持する。
+  - **`setupStickyHead(table)`**: `data-no-sticky` がなければ `.gpte-sticky-head` クラスを追加し、`getNavbarHeight()` の値で `--gpte-sticky-top` を初期化する。
+  - **`setupFilterBar(table)`**: `data-no-filter` がなければフィルタバー（`[data-gpte-filter-bar]`）と空のカウントフッター（`[data-gpte-filter-footer]`）を生成し、入力 `'input'` イベントを `applyFilter` に bind した `FilterRefs` を返す（DOM 挿入はせず参照のみ返す）。`data-no-filter` 付きなら `null`。
+  - **`setupCopyButton(table, refs)`**: `navigator.clipboard.writeText` 利用可能時のみコピーボタンを生成し `refs.bar` の末尾に追加。`copyBtn` / `copyHandler` を `refs` に書き込む。
+  - 最後に `enhanceTable` 本体が `data-gpte-enhanced="1"` と `.gpte-enhanced` クラスを付与（CSS `table.gpte-enhanced` セレクタで視覚スタイル）、`filterRefs` WeakMap への登録、`insertAdjacentElement` でバー・フッターを sibling 挿入、`restripeRows()` で `gpte-row-odd` / `gpte-row-even` 付与、を行う。
 - **`sortRows(table, colIdx, dir)`**: `tbody > tr` を配列化し、列値から `detectColumnType()` で数値 / 日付 / 文字列を判定。比較関数でソートして DocumentFragment で再 append。`dir === 'none'` は `data-gpte-original-index` 昇順で復元。各行の `style.display`（フィルタによる非表示状態）は inline style として保持されるため、ソート後も非表示が維持される。再 append 後に `restripeRows()` を呼んで、新しい DOM 順に基づいて表示中の行へ `gpte-row-odd` / `gpte-row-even` を振り直す。
 - **`applyFilter(table, query)`**: クエリを空白で分割してトークン化する。まず `unwrapHighlights()` で前回のハイライトをクリア。続いて `tbody > tr` 全行の `textContent` に対して全トークンが含まれる行のみ `display: ''`、それ以外を `display: 'none'` にする（空クエリ時は全行を復元）。`restripeRows()` で表示中の行に `gpte-row-odd` / `gpte-row-even` を振り直した後、トークンが 1 個以上ある場合は `highlightMatches()` でマッチ箇所を `<mark>` wrap する。最後に `updateFilterFooter()` を呼んでカウントを更新。
 - **`unwrapHighlights(table)`**: `tbody mark.gpte-mark` を全件取得し、`mark.replaceWith(...childNodes)` で unwrap。unwrap した親要素に `normalize()` を呼んで隣接 textNode を統合する（次回の `indexOf` 位置がズレるのを防ぐ）。
@@ -74,8 +79,11 @@ growi-plugin-table-extended/
 - **MutationObserver**: `document.body` を `childList: true, subtree: true, attributes: true, attributeFilter: ['class']` で監視。新しい `<table>` 追加時は `scheduleScan()` を呼ぶ。`body.class` 変化時（編集モード遷移）は `isHiddenContext()` を判定し、true（編集モードへ移行）なら enhance 済みテーブルを即 `cleanupTable` し、false（閲覧モードへ復帰）なら `scheduleScan()` を呼ぶ。
 - **編集モード判定**: `location.hash === '#edit'` / `pathname.endsWith('/edit')` / `body.classList.contains('editing')` / `body.classList.contains('grw-editor-mode')` / `body.classList.contains('modal-open')`（GROWI テーブル編集モーダル）のいずれかで判定。
 - **データ型推定**: `detectColumnType(values)` で列全セルを見て all-numeric（カンマ除去後）→ all-date（`YYYY-MM-DD` or `YYYY/MM/DD` パターン）→ 文字列の優先順で判定。
-- **`getCopyCellTextJson(cell)`**: JSON コピー専用のセルテキスト抽出。`\x00` センチネルで `<br>` を置換後に `textContent` 取得 → センチネルで split → 各セグメントの空白を圧縮 → `\n` で再 join する。`getCopyCellText` は `<br>` 後も改行を空白に潰すが、こちらは改行を維持する。
-- **`toJson(table)`**: 表示行を JSON オブジェクト配列に変換。ヘッダーをキーに変換（空 → `col_N`、重複は出現順に `_2` / `_3` サフィックス付与）。`detectColumnType` で列型を一括判定し、`number` 列は `parseNumeric` で変換・空セルは `null`・失敗時は元の文字列にフォールバック。`JSON.stringify(data, null, 2)` で 2 スペースインデント出力。
+- **`extractCellSegments(cell)`**: コピー系セルテキストの共通抽出。`\x00` センチネルで `<br>` を置換後に `textContent` 取得 → センチネルで split → 各セグメントの改行・連続空白を圧縮・trim した文字列配列を返す。
+- **`getCopyCellText(cell, brReplacement)`**: `extractCellSegments` の結果を `brReplacement`（CSV では半角スペース / Markdown では `<br>`）で join + trim。
+- **`getCopyCellTextJson(cell)`**: `extractCellSegments` の結果を `\n` で join。`<br>` 改行を維持する点が CSV/MD と異なる。
+- **`collectVisibleCells(table, mapHeader, mapCell)`**: ヘッダ `<th>` と表示中の `<tr>` 配下 `<td>` を、与えられた map 関数でそれぞれ変換して `{ header, rows }` を返すジェネリックヘルパー。`extractRows`（CSV/MD 用）と `toJson` の両方が利用する。
+- **`toJson(table)`**: `collectVisibleCells(table, th=>getCopyCellText(th,' '), td=>getCopyCellTextJson(td))` で表示行を抽出 → JSON オブジェクト配列に変換。ヘッダーをキーに変換（空 → `col_N`、重複は出現順に `_2` / `_3` サフィックス付与）。`detectColumnType` で列型を一括判定し、`number` 列は `parseNumeric` で変換・空セルは `null`・失敗時は元の文字列にフォールバック。`JSON.stringify(data, null, 2)` で 2 スペースインデント出力。
 - **`makeJsonOkIcon()`**: 波括弧 `{ }` を模した 2 本の SVG パスに `appendCheckBadge()` で ✓ バッジを付与。
 - **`handleCopyClick(table, btn, e)`**: `e.altKey` → JSON / `e.shiftKey` → Markdown / なし → CSV の優先順で分岐（Alt が Shift より優先）。引数を `boolean` から `MouseEvent` に変更。
 
