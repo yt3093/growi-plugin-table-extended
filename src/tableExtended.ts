@@ -176,33 +176,50 @@ function highlightMatches(table: HTMLTableElement, tokens: string[]): void {
   }
 }
 
-function getCopyCellText(cell: Element, brReplacement: string): string {
+const CELL_SEGMENT_SENTINEL = '\x00';
+
+function extractCellSegments(cell: Element): string[] {
   const clone = cell.cloneNode(true) as Element;
   for (const br of Array.from(clone.querySelectorAll('br'))) {
-    br.replaceWith(brReplacement);
+    br.replaceWith(CELL_SEGMENT_SENTINEL);
   }
   return (clone.textContent ?? '')
-    .replace(/\s*\r?\n\s*/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+    .split(CELL_SEGMENT_SENTINEL)
+    .map(s => s.replace(/\s*\r?\n\s*/g, ' ').replace(/\s+/g, ' ').trim());
 }
 
-function extractRows(table: HTMLTableElement, brReplacement: string): { header: string[]; rows: string[][] } {
+function getCopyCellText(cell: Element, brReplacement: string): string {
+  return extractCellSegments(cell).join(brReplacement).trim();
+}
+
+function collectVisibleCells<T>(
+  table: HTMLTableElement,
+  mapHeader: (th: HTMLTableCellElement) => T,
+  mapCell: (td: HTMLTableCellElement) => T,
+): { header: T[]; rows: T[][] } {
   const thead = table.querySelector('thead');
   const header = thead
-    ? Array.from(thead.querySelectorAll<HTMLTableCellElement>('tr > th')).map(th => getCopyCellText(th, brReplacement))
+    ? Array.from(thead.querySelectorAll<HTMLTableCellElement>('tr > th')).map(mapHeader)
     : [];
   const tbody = table.querySelector('tbody');
-  const bodyRows: string[][] = [];
+  const rows: T[][] = [];
   if (tbody) {
     for (const row of Array.from(tbody.querySelectorAll<HTMLTableRowElement>(':scope > tr'))) {
       if (row.style.display === 'none') continue;
-      bodyRows.push(
-        Array.from(row.querySelectorAll<HTMLTableCellElement>(':scope > td')).map(td => getCopyCellText(td, brReplacement))
+      rows.push(
+        Array.from(row.querySelectorAll<HTMLTableCellElement>(':scope > td')).map(mapCell)
       );
     }
   }
-  return { header, rows: bodyRows };
+  return { header, rows };
+}
+
+function extractRows(table: HTMLTableElement, brReplacement: string): { header: string[]; rows: string[][] } {
+  return collectVisibleCells(
+    table,
+    th => getCopyCellText(th, brReplacement),
+    td => getCopyCellText(td, brReplacement),
+  );
 }
 
 function csvEscape(v: string): string {
@@ -233,32 +250,15 @@ function toMarkdown({ header, rows }: { header: string[]; rows: string[][] }): s
 }
 
 function getCopyCellTextJson(cell: Element): string {
-  const clone = cell.cloneNode(true) as Element;
-  const BR = '\x00';
-  for (const br of Array.from(clone.querySelectorAll('br'))) br.replaceWith(BR);
-  const raw = clone.textContent ?? '';
-  return raw
-    .split(BR)
-    .map(s => s.replace(/\s*\r?\n\s*/g, ' ').replace(/\s+/g, ' ').trim())
-    .join('\n');
+  return extractCellSegments(cell).join('\n');
 }
 
 function toJson(table: HTMLTableElement): string {
-  const thead = table.querySelector('thead');
-  const rawHeaders = thead
-    ? Array.from(thead.querySelectorAll<HTMLTableCellElement>('tr > th')).map(th => getCopyCellText(th, ' '))
-    : [];
-
-  const tbody = table.querySelector('tbody');
-  const bodyRows: string[][] = [];
-  if (tbody) {
-    for (const row of Array.from(tbody.querySelectorAll<HTMLTableRowElement>(':scope > tr'))) {
-      if (row.style.display === 'none') continue;
-      bodyRows.push(
-        Array.from(row.querySelectorAll<HTMLTableCellElement>(':scope > td')).map(td => getCopyCellTextJson(td))
-      );
-    }
-  }
+  const { header: rawHeaders, rows: bodyRows } = collectVisibleCells(
+    table,
+    th => getCopyCellText(th, ' '),
+    td => getCopyCellTextJson(td),
+  );
 
   // ヘッダーを JSON キーに変換（空は col_N、重複は _2 サフィックス）
   const keyCount = new Map<string, number>();
@@ -375,37 +375,42 @@ function makeFilterIcon(): SVGSVGElement {
   ]);
 }
 
+const COPY_BTN_STATE_MAP: Record<CopyBtnState, { icon: () => SVGSVGElement; label: string; className: string | null }> = {
+  'copy': {
+    icon: makeCopyIcon,
+    label: 'コピー (クリック: CSV / Shift+クリック: Markdown / Alt+クリック: JSON)',
+    className: null,
+  },
+  'ok-csv': {
+    icon: makeCsvOkIcon,
+    label: 'CSV でクリップボードにコピーしました',
+    className: COPY_CLASS_OK,
+  },
+  'ok-md': {
+    icon: makeMdOkIcon,
+    label: 'Markdown でクリップボードにコピーしました',
+    className: COPY_CLASS_OK,
+  },
+  'ok-json': {
+    icon: makeJsonOkIcon,
+    label: 'JSON でクリップボードにコピーしました',
+    className: COPY_CLASS_OK,
+  },
+  'fail': {
+    icon: makeFailIcon,
+    label: 'クリップボードへのコピーに失敗しました',
+    className: COPY_CLASS_FAIL,
+  },
+};
+
 function setCopyBtnState(btn: HTMLButtonElement, state: CopyBtnState): void {
   while (btn.firstChild) btn.removeChild(btn.firstChild);
   btn.classList.remove(COPY_CLASS_OK, COPY_CLASS_FAIL);
-
-  let icon: SVGSVGElement;
-  let label: string;
-
-  if (state === 'ok-csv') {
-    icon = makeCsvOkIcon();
-    label = 'CSV でクリップボードにコピーしました';
-    btn.classList.add(COPY_CLASS_OK);
-  } else if (state === 'ok-md') {
-    icon = makeMdOkIcon();
-    label = 'Markdown でクリップボードにコピーしました';
-    btn.classList.add(COPY_CLASS_OK);
-  } else if (state === 'ok-json') {
-    icon = makeJsonOkIcon();
-    label = 'JSON でクリップボードにコピーしました';
-    btn.classList.add(COPY_CLASS_OK);
-  } else if (state === 'fail') {
-    icon = makeFailIcon();
-    label = 'クリップボードへのコピーに失敗しました';
-    btn.classList.add(COPY_CLASS_FAIL);
-  } else {
-    icon = makeCopyIcon();
-    label = 'コピー (クリック: CSV / Shift+クリック: Markdown / Alt+クリック: JSON)';
-  }
-
-  btn.setAttribute('aria-label', label);
-  btn.title = label;
-  btn.appendChild(icon);
+  const cfg = COPY_BTN_STATE_MAP[state];
+  if (cfg.className) btn.classList.add(cfg.className);
+  btn.setAttribute('aria-label', cfg.label);
+  btn.title = cfg.label;
+  btn.appendChild(cfg.icon());
 }
 
 function flashCopyState(table: HTMLTableElement, btn: HTMLButtonElement, state: 'ok-csv' | 'ok-md' | 'ok-json' | 'fail'): void {
@@ -471,6 +476,14 @@ function applyFilter(table: HTMLTableElement, query: string): void {
   updateFilterFooter(refs.footer, query, visible, total);
 }
 
+function getOriginalIndex(row: Element): number {
+  return parseInt(row.getAttribute(ORIG_INDEX_ATTR) ?? '0', 10);
+}
+
+function restoreOriginalOrder(rows: HTMLTableRowElement[]): void {
+  rows.sort((a, b) => getOriginalIndex(a) - getOriginalIndex(b));
+}
+
 function parseNumeric(s: string): number {
   return parseFloat(s.replace(/,/g, '').replace(/[^\d.\-+eE]/g, ''));
 }
@@ -495,10 +508,7 @@ function sortRows(table: HTMLTableElement, colIdx: number, dir: SortDir): void {
   const rows = Array.from(tbody.querySelectorAll<HTMLTableRowElement>(':scope > tr'));
 
   if (dir === 'none') {
-    rows.sort((a, b) =>
-      parseInt(a.getAttribute(ORIG_INDEX_ATTR) ?? '0', 10) -
-      parseInt(b.getAttribute(ORIG_INDEX_ATTR) ?? '0', 10)
-    );
+    restoreOriginalOrder(rows);
   } else {
     const colType = detectColumnType(rows.map(r => getCellText(r, colIdx)));
     rows.sort((a, b) => {
@@ -566,17 +576,7 @@ function isEligible(table: HTMLTableElement): boolean {
   return true;
 }
 
-function enhanceTable(table: HTMLTableElement): void {
-  const thead = table.querySelector('thead');
-  if (!thead) return;
-
-  const tbody = table.querySelector('tbody');
-  if (tbody) {
-    Array.from(tbody.querySelectorAll<HTMLTableRowElement>(':scope > tr')).forEach((row, i) => {
-      row.setAttribute(ORIG_INDEX_ATTR, String(i));
-    });
-  }
-
+function setupSortHeaders(table: HTMLTableElement, thead: HTMLTableSectionElement): void {
   Array.from(thead.querySelectorAll<HTMLTableCellElement>('th')).forEach((th, colIdx) => {
     th.setAttribute(COL_ATTR, String(colIdx));
     th.setAttribute('aria-sort', 'none');
@@ -589,63 +589,85 @@ function enhanceTable(table: HTMLTableElement): void {
   };
   thead.addEventListener('click', handler);
   tableListeners.set(table, handler);
+}
+
+function setupStickyHead(table: HTMLTableElement): void {
+  if (table.hasAttribute(NO_STICKY_ATTR)) return;
+  table.classList.add('gpte-sticky-head');
+  const navbarHeight = getNavbarHeight();
+  if (navbarHeight > 0) {
+    table.style.setProperty('--gpte-sticky-top', `${navbarHeight}px`);
+  }
+}
+
+function setupFilterBar(table: HTMLTableElement): FilterRefs | null {
+  if (table.hasAttribute(NO_FILTER_ATTR)) return null;
+
+  const bar = document.createElement('div');
+  bar.setAttribute(FILTER_BAR_ATTR, '1');
+
+  const wrap = document.createElement('span');
+  wrap.className = 'gpte-filter-input-wrap';
+
+  const filterIcon = makeFilterIcon();
+  filterIcon.classList.add('gpte-filter-icon');
+  filterIcon.setAttribute('aria-hidden', 'true');
+  wrap.appendChild(filterIcon);
+
+  const input = document.createElement('input');
+  input.type = 'search';
+  input.setAttribute('aria-label', 'テーブルをフィルタ');
+  wrap.appendChild(input);
+
+  bar.appendChild(wrap);
+
+  const footer = document.createElement('div');
+  footer.setAttribute(FILTER_FOOTER_ATTR, '1');
+  footer.setAttribute('aria-live', 'polite');
+  footer.hidden = true;
+
+  const handler = () => applyFilter(table, input.value);
+  input.addEventListener('input', handler);
+
+  return { bar, footer, handler };
+}
+
+function setupCopyButton(table: HTMLTableElement, refs: FilterRefs): void {
+  if (typeof navigator.clipboard?.writeText !== 'function') return;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.setAttribute(COPY_BTN_ATTR, '1');
+  setCopyBtnState(btn, 'copy');
+  const copyHandler = (e: MouseEvent) => handleCopyClick(table, btn, e);
+  btn.addEventListener('click', copyHandler);
+  refs.bar.appendChild(btn);
+  refs.copyBtn = btn;
+  refs.copyHandler = copyHandler;
+}
+
+function enhanceTable(table: HTMLTableElement): void {
+  const thead = table.querySelector('thead');
+  if (!thead) return;
+
+  const tbody = table.querySelector('tbody');
+  if (tbody) {
+    Array.from(tbody.querySelectorAll<HTMLTableRowElement>(':scope > tr')).forEach((row, i) => {
+      row.setAttribute(ORIG_INDEX_ATTR, String(i));
+    });
+  }
+
+  setupSortHeaders(table, thead);
 
   table.setAttribute(ENHANCED_ATTR, '1');
   table.classList.add('gpte-enhanced');
-  if (!table.hasAttribute(NO_STICKY_ATTR)) {
-    table.classList.add('gpte-sticky-head');
-    const navbarHeight = getNavbarHeight();
-    if (navbarHeight > 0) {
-      table.style.setProperty('--gpte-sticky-top', `${navbarHeight}px`);
-    }
-  }
+  setupStickyHead(table);
 
-  if (!table.hasAttribute(NO_FILTER_ATTR)) {
-    const bar = document.createElement('div');
-    bar.setAttribute(FILTER_BAR_ATTR, '1');
-
-    const wrap = document.createElement('span');
-    wrap.className = 'gpte-filter-input-wrap';
-
-    const filterIcon = makeFilterIcon();
-    filterIcon.classList.add('gpte-filter-icon');
-    filterIcon.setAttribute('aria-hidden', 'true');
-    wrap.appendChild(filterIcon);
-
-    const input = document.createElement('input');
-    input.type = 'search';
-    input.setAttribute('aria-label', 'テーブルをフィルタ');
-    wrap.appendChild(input);
-
-    bar.appendChild(wrap);
-
-    const footer = document.createElement('div');
-    footer.setAttribute(FILTER_FOOTER_ATTR, '1');
-    footer.setAttribute('aria-live', 'polite');
-    footer.hidden = true;
-
-    const filterHandler = () => applyFilter(table, input.value);
-    input.addEventListener('input', filterHandler);
-
-    filterRefs.set(table, { bar, footer, handler: filterHandler });
-
-    if (typeof navigator.clipboard?.writeText === 'function') {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.setAttribute(COPY_BTN_ATTR, '1');
-      setCopyBtnState(btn, 'copy');
-      const copyHandler = (e: MouseEvent) => handleCopyClick(table, btn, e);
-      btn.addEventListener('click', copyHandler);
-      bar.appendChild(btn);
-      const refs = filterRefs.get(table);
-      if (refs) {
-        refs.copyBtn = btn;
-        refs.copyHandler = copyHandler;
-      }
-    }
-
-    table.insertAdjacentElement('beforebegin', bar);
-    table.insertAdjacentElement('afterend', footer);
+  const refs = setupFilterBar(table);
+  if (refs) {
+    setupCopyButton(table, refs);
+    filterRefs.set(table, refs);
+    table.insertAdjacentElement('beforebegin', refs.bar);
+    table.insertAdjacentElement('afterend', refs.footer);
   }
 
   restripeRows(table);
@@ -670,10 +692,7 @@ function cleanupTable(table: HTMLTableElement): void {
   const tbody = table.querySelector('tbody');
   if (tbody) {
     const rows = Array.from(tbody.querySelectorAll<HTMLTableRowElement>(':scope > tr'));
-    rows.sort((a, b) =>
-      parseInt(a.getAttribute(ORIG_INDEX_ATTR) ?? '0', 10) -
-      parseInt(b.getAttribute(ORIG_INDEX_ATTR) ?? '0', 10)
-    );
+    restoreOriginalOrder(rows);
     const frag = document.createDocumentFragment();
     for (const row of rows) {
       row.style.display = '';
