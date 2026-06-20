@@ -23,7 +23,7 @@
 | 行数カウント | フィルタ入力中のみテーブル下部に「M / N 件」を表示（空クリアで非表示） |
 | 適用除外 | `thead` なし / `th` 0 個 / `data-no-sort` 属性付きテーブル / 既に `data-gpte-enhanced` 付き |
 | フィルタ除外 | `data-no-filter` 属性付きテーブルではフィルタ UI のみ非表示（ソートは有効）。コピーボタンもフィルタバーに同居するため、`data-no-filter` テーブルではコピー機能も無効 |
-| コピー | フィルタバー右端のアイコンボタン（二重矩形 SVG）。クリックで表示行を CSV（RFC 4180 / `,` 区切り / `\n` 改行）、Shift+クリックで Markdown テーブル形式でクリップボードへ。ヘッダー行を常に含む。セル内改行（`<br>`）は CSV では半角スペース・Markdown では `<br>` に変換。`textContent` ベースのため `<mark>` / `::after` 矢印は除去済み。`navigator.clipboard` 非対応環境ではボタンを非表示。成功時は 2 秒間フォーマット別 SVG アイコン（CSV: スプレッドシートグリッド＋✓バッジ / MD: Markdown ロゴ風＋✓バッジ）と背景フラッシュで視覚フィードバック。失敗時は × アイコン＋赤フラッシュ。`prefers-reduced-motion: reduce` 環境ではフラッシュなし |
+| コピー | フィルタバー右端のアイコンボタン（二重矩形 SVG）。クリックで表示行を CSV（RFC 4180 / `,` 区切り / `\n` 改行）、Shift+クリックで Markdown テーブル形式、**Alt+クリック（Mac: Option+クリック）で JSON**（オブジェクト配列 / 2 スペースインデント）でクリップボードへ。ヘッダー行を常に含む。セル内改行（`<br>`）は CSV では半角スペース・Markdown では `<br>`・JSON では `\n` に変換。`textContent` ベースのため `<mark>` / `::after` 矢印は除去済み。JSON はヘッダーをキー、行データを値とするオブジェクトの配列。`detectColumnType` が `number` と判定した列は数値型で出力（カンマ除去後 `parseFloat`）、空セルは `null`。ヘッダーが空の列は `col_N`、重複するキーは `_2` / `_3` サフィックスで一意化。`navigator.clipboard` 非対応環境ではボタンを非表示。成功時は 2 秒間フォーマット別 SVG アイコン（CSV: スプレッドシートグリッド＋✓バッジ / MD: Markdown ロゴ風＋✓バッジ / JSON: 波括弧 `{}`＋✓バッジ）と背景フラッシュで視覚フィードバック。失敗時は × アイコン＋赤フラッシュ。`prefers-reduced-motion: reduce` 環境ではフラッシュなし |
 | スティッキーヘッダー | スクロール時に `thead` を画面上部に固定。GROWI ナビバー（`NAVBAR_SELECTORS` 優先順で検出）の高さを JS が自動取得し `--gpte-sticky-top` を inline style で設定。`ResizeObserver` でナビバー高さの変化に動的追従。手動上書きは CSS 変数 `--gpte-sticky-top` で可能（デフォルト `0px`）。固定時に薄い下方向 `box-shadow` を付与 |
 | スティッキー除外 | `data-no-sticky` 属性付きテーブルでは sticky を無効化（ソート/フィルタは有効） |
 | 非表示条件 | 編集モード（`/edit`, `#edit`, `body.editing`, `body.modal-open`）・管理画面（`/admin`）・印刷時は矢印・フィルタ UI 非表示かつソート無効。印刷時はスティッキーも解除 |
@@ -74,6 +74,10 @@ growi-plugin-table-extended/
 - **MutationObserver**: `document.body` を `childList: true, subtree: true, attributes: true, attributeFilter: ['class']` で監視。新しい `<table>` 追加時は `scheduleScan()` を呼ぶ。`body.class` 変化時（編集モード遷移）は `isHiddenContext()` を判定し、true（編集モードへ移行）なら enhance 済みテーブルを即 `cleanupTable` し、false（閲覧モードへ復帰）なら `scheduleScan()` を呼ぶ。
 - **編集モード判定**: `location.hash === '#edit'` / `pathname.endsWith('/edit')` / `body.classList.contains('editing')` / `body.classList.contains('grw-editor-mode')` / `body.classList.contains('modal-open')`（GROWI テーブル編集モーダル）のいずれかで判定。
 - **データ型推定**: `detectColumnType(values)` で列全セルを見て all-numeric（カンマ除去後）→ all-date（`YYYY-MM-DD` or `YYYY/MM/DD` パターン）→ 文字列の優先順で判定。
+- **`getCopyCellTextJson(cell)`**: JSON コピー専用のセルテキスト抽出。`\x00` センチネルで `<br>` を置換後に `textContent` 取得 → センチネルで split → 各セグメントの空白を圧縮 → `\n` で再 join する。`getCopyCellText` は `<br>` 後も改行を空白に潰すが、こちらは改行を維持する。
+- **`toJson(table)`**: 表示行を JSON オブジェクト配列に変換。ヘッダーをキーに変換（空 → `col_N`、重複は出現順に `_2` / `_3` サフィックス付与）。`detectColumnType` で列型を一括判定し、`number` 列は `parseNumeric` で変換・空セルは `null`・失敗時は元の文字列にフォールバック。`JSON.stringify(data, null, 2)` で 2 スペースインデント出力。
+- **`makeJsonOkIcon()`**: 波括弧 `{ }` を模した 2 本の SVG パスに `appendCheckBadge()` で ✓ バッジを付与。
+- **`handleCopyClick(table, btn, e)`**: `e.altKey` → JSON / `e.shiftKey` → Markdown / なし → CSV の優先順で分岐（Alt が Shift より優先）。引数を `boolean` から `MouseEvent` に変更。
 
 ## ハマりどころ (必読)
 
@@ -230,18 +234,26 @@ GROWI 管理画面 `/admin/plugins` で **削除 → 再インストール**。
 55. `<table data-no-filter>` 属性付きテーブルにはコピーボタンが出ない
 56. クリックするとクリップボードに CSV（`,` 区切り / ヘッダー含む）が入る
 57. Shift+クリックで Markdown テーブル形式（`|` 区切り / 区切り行あり）がコピーされる
-58. フィルタで絞り込んだ状態でコピー → 表示行のみ＋ヘッダーがコピーされる（非表示行は除外）
-59. ソート後にコピー → 表示順がそのまま CSV / Markdown に反映される
-60. ヘッダーの矢印（⇅ ▲ ▼）はコピー結果に含まれない
-61. ハイライト（`<mark>`）が付いている状態でコピーしてもテキストにマークは含まれない
-62. セルに `,` `"` を含むデータ → CSV がダブルクォートで正しくエスケープされる
-63. セルに `|` を含むデータ → Markdown 出力が `\|` にエスケープされる
-64. コピー成功時にボタンテキストが「✓ CSVコピー済み」または「✓ MDコピー済み」に変わり 2 秒後に「コピー」に戻る
-65. クリップボード API が拒否された場合はボタンに「コピー失敗」が 2 秒表示される
-66. 編集モードへ移行するとコピーボタンも消える（フィルタバーごと cleanup）
-67. 編集モードから戻るとコピーボタンが再生成される
-68. 印刷プレビューでコピーボタンが非表示になる
-69. プラグイン無効化（`unmount`）でコピーボタン・イベントリスナ・タイマーが全解除される
+58. Alt+クリック（Mac: Option+クリック）で JSON 形式（オブジェクト配列 / 2 スペースインデント）がコピーされる
+59. フィルタで絞り込んだ状態でコピー → 表示行のみ＋ヘッダーがコピーされる（非表示行は除外）
+60. ソート後にコピー → 表示順がそのまま CSV / Markdown / JSON に反映される
+61. ヘッダーの矢印（⇅ ▲ ▼）はコピー結果に含まれない
+62. ハイライト（`<mark>`）が付いている状態でコピーしてもテキストにマークは含まれない
+63. セルに `,` `"` を含むデータ → CSV がダブルクォートで正しくエスケープされる
+64. セルに `|` を含むデータ → Markdown 出力が `\|` にエスケープされる
+65. JSON で数値列（カンマ区切り含む）の値が `number` 型で出力される
+66. JSON で空セルが `null` になる
+67. JSON でセル内 `<br>` が `\n`（改行文字）に変換される
+68. JSON でヘッダーが空の列のキーが `col_1` 形式になる
+69. JSON でヘッダーが重複する場合、2 つ目以降に `_2` / `_3` サフィックスが付く
+70. JSON コピー成功時に `{}` SVG + ✓ バッジアイコンと緑フラッシュが 2 秒間表示される
+71. コピー成功時にボタンの `aria-label` が「JSON でクリップボードにコピーしました」になる
+72. Alt+Shift の同時押しでは Alt（JSON）が優先される
+73. クリップボード API が拒否された場合はボタンに「コピー失敗」が 2 秒表示される（JSON でも同様）
+74. 編集モードへ移行するとコピーボタンも消える（フィルタバーごと cleanup）
+75. 編集モードから戻るとコピーボタンが再生成される
+76. 印刷プレビューでコピーボタンが非表示になる
+77. プラグイン無効化（`unmount`）でコピーボタン・イベントリスナ・タイマーが全解除される
 
 ## 会話ガイドライン
 

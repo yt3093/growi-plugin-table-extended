@@ -18,7 +18,7 @@ const COPY_CLASS_OK = 'gpte-copy-ok';
 const COPY_CLASS_FAIL = 'gpte-copy-fail';
 const COPY_FEEDBACK_MS = 2000;
 const SVG_NS = 'http://www.w3.org/2000/svg';
-type CopyBtnState = 'copy' | 'ok-csv' | 'ok-md' | 'fail';
+type CopyBtnState = 'copy' | 'ok-csv' | 'ok-md' | 'ok-json' | 'fail';
 
 // GROWI のナビバー要素を検索するセレクタ候補（上から順に試す）
 const NAVBAR_SELECTORS = [
@@ -232,6 +232,67 @@ function toMarkdown({ header, rows }: { header: string[]; rows: string[][] }): s
   return lines.join('\n');
 }
 
+function getCopyCellTextJson(cell: Element): string {
+  const clone = cell.cloneNode(true) as Element;
+  const BR = '\x00';
+  for (const br of Array.from(clone.querySelectorAll('br'))) br.replaceWith(BR);
+  const raw = clone.textContent ?? '';
+  return raw
+    .split(BR)
+    .map(s => s.replace(/\s*\r?\n\s*/g, ' ').replace(/\s+/g, ' ').trim())
+    .join('\n');
+}
+
+function toJson(table: HTMLTableElement): string {
+  const thead = table.querySelector('thead');
+  const rawHeaders = thead
+    ? Array.from(thead.querySelectorAll<HTMLTableCellElement>('tr > th')).map(th => getCopyCellText(th, ' '))
+    : [];
+
+  const tbody = table.querySelector('tbody');
+  const bodyRows: string[][] = [];
+  if (tbody) {
+    for (const row of Array.from(tbody.querySelectorAll<HTMLTableRowElement>(':scope > tr'))) {
+      if (row.style.display === 'none') continue;
+      bodyRows.push(
+        Array.from(row.querySelectorAll<HTMLTableCellElement>(':scope > td')).map(td => getCopyCellTextJson(td))
+      );
+    }
+  }
+
+  // ヘッダーを JSON キーに変換（空は col_N、重複は _2 サフィックス）
+  const keyCount = new Map<string, number>();
+  const keys = rawHeaders.map((h, i) => {
+    const base = h || `col_${i + 1}`;
+    const prev = keyCount.get(base) ?? 0;
+    keyCount.set(base, prev + 1);
+    return prev === 0 ? base : `${base}_${prev + 1}`;
+  });
+
+  // 列ごとに型を推定
+  const colTypes: ColType[] = keys.map((_, colIdx) =>
+    detectColumnType(bodyRows.map(row => row[colIdx] ?? ''))
+  );
+
+  const data = bodyRows.map(row => {
+    const obj: Record<string, string | number | null> = {};
+    keys.forEach((key, colIdx) => {
+      const raw = row[colIdx] ?? '';
+      if (raw === '') {
+        obj[key] = null;
+      } else if (colTypes[colIdx] === 'number') {
+        const num = parseNumeric(raw);
+        obj[key] = isNaN(num) ? raw : num;
+      } else {
+        obj[key] = raw;
+      }
+    });
+    return obj;
+  });
+
+  return JSON.stringify(data, null, 2);
+}
+
 function createSvgEl(tag: string, attrs: Record<string, string>): Element {
   const el = document.createElementNS(SVG_NS, tag);
   for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
@@ -299,6 +360,15 @@ function makeFailIcon(): SVGSVGElement {
   ]);
 }
 
+function makeJsonOkIcon(): SVGSVGElement {
+  const svg = buildSvg([
+    { tag: 'path', attrs: { d: 'M6 2C5 2 4 2.8 4 4v4c0 1.2-1 1.8-2 2 1 .2 2 .8 2 2v4c0 1.2 1 2 2 2' } },
+    { tag: 'path', attrs: { d: 'M14 2c1 0 2 .8 2 2v4c0 1.2 1 1.8 2 2-1 .2-2 .8-2 2v4c0 1.2-1 2-2 2' } },
+  ]);
+  appendCheckBadge(svg);
+  return svg;
+}
+
 function makeFilterIcon(): SVGSVGElement {
   return buildSvg([
     { tag: 'path', attrs: { d: 'M3 4h18l-7 9v6l-4-2v-4z', 'stroke-linejoin': 'round' } },
@@ -320,13 +390,17 @@ function setCopyBtnState(btn: HTMLButtonElement, state: CopyBtnState): void {
     icon = makeMdOkIcon();
     label = 'Markdown でクリップボードにコピーしました';
     btn.classList.add(COPY_CLASS_OK);
+  } else if (state === 'ok-json') {
+    icon = makeJsonOkIcon();
+    label = 'JSON でクリップボードにコピーしました';
+    btn.classList.add(COPY_CLASS_OK);
   } else if (state === 'fail') {
     icon = makeFailIcon();
     label = 'クリップボードへのコピーに失敗しました';
     btn.classList.add(COPY_CLASS_FAIL);
   } else {
     icon = makeCopyIcon();
-    label = 'コピー (クリック: CSV / Shift+クリック: Markdown)';
+    label = 'コピー (クリック: CSV / Shift+クリック: Markdown / Alt+クリック: JSON)';
   }
 
   btn.setAttribute('aria-label', label);
@@ -334,7 +408,7 @@ function setCopyBtnState(btn: HTMLButtonElement, state: CopyBtnState): void {
   btn.appendChild(icon);
 }
 
-function flashCopyState(table: HTMLTableElement, btn: HTMLButtonElement, state: 'ok-csv' | 'ok-md' | 'fail'): void {
+function flashCopyState(table: HTMLTableElement, btn: HTMLButtonElement, state: 'ok-csv' | 'ok-md' | 'ok-json' | 'fail'): void {
   const refs = filterRefs.get(table);
   if (refs?.copyTimerId !== undefined) window.clearTimeout(refs.copyTimerId);
   setCopyBtnState(btn, state);
@@ -345,11 +419,21 @@ function flashCopyState(table: HTMLTableElement, btn: HTMLButtonElement, state: 
   if (refs) refs.copyTimerId = id;
 }
 
-function handleCopyClick(table: HTMLTableElement, btn: HTMLButtonElement, shift: boolean): void {
-  const data = extractRows(table, shift ? '<br>' : ' ');
-  const text = shift ? toMarkdown(data) : toCsv(data);
+function handleCopyClick(table: HTMLTableElement, btn: HTMLButtonElement, e: MouseEvent): void {
+  let text: string;
+  let successState: 'ok-csv' | 'ok-md' | 'ok-json';
+  if (e.altKey) {
+    text = toJson(table);
+    successState = 'ok-json';
+  } else if (e.shiftKey) {
+    text = toMarkdown(extractRows(table, '<br>'));
+    successState = 'ok-md';
+  } else {
+    text = toCsv(extractRows(table, ' '));
+    successState = 'ok-csv';
+  }
   navigator.clipboard.writeText(text).then(
-    () => flashCopyState(table, btn, shift ? 'ok-md' : 'ok-csv'),
+    () => flashCopyState(table, btn, successState),
     (err) => {
       console.warn('[gpte] clipboard write failed:', err);
       flashCopyState(table, btn, 'fail');
@@ -550,7 +634,7 @@ function enhanceTable(table: HTMLTableElement): void {
       btn.type = 'button';
       btn.setAttribute(COPY_BTN_ATTR, '1');
       setCopyBtnState(btn, 'copy');
-      const copyHandler = (e: MouseEvent) => handleCopyClick(table, btn, e.shiftKey);
+      const copyHandler = (e: MouseEvent) => handleCopyClick(table, btn, e);
       btn.addEventListener('click', copyHandler);
       bar.appendChild(btn);
       const refs = filterRefs.get(table);
